@@ -1,7 +1,8 @@
 # Starts the Custom AI workstation. Open http://localhost:8080 when it finishes.
 #   .\start-all.ps1            everything
 #   .\start-all.ps1 -NoComfy   skip the headless ComfyUI (use this if you prefer the Comfy Desktop app)
-param([switch]$NoComfy)
+#   .\start-all.ps1 -NoBrowser don't open the app window at the end
+param([switch]$NoComfy, [switch]$NoBrowser)
 
 $Root = $PSScriptRoot
 $Logs = Join-Path $Root "logs"
@@ -92,7 +93,7 @@ Write-Host "Waiting for Open WebUI..."
 for ($i = 0; $i -lt 90; $i++) {
     if (Test-Port 8080) { break }; Start-Sleep 2
 }
-Start-Process "http://localhost:8080"
+if (-not $NoBrowser) { & "$Root\open-app.ps1" -NoStart }
 Write-Host "Ready."
 Write-Host "  Chat:     http://localhost:8080"
 Write-Host "  ComfyUI:  http://localhost:8188"

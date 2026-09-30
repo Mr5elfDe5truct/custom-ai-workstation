@@ -131,12 +131,16 @@ uv venv envs\tools --python 3.12;      uv pip install -p envs\tools mcpo mcp htt
 **5. Start it:**
 
 ```powershell
-.\start-all.ps1          # starts everything and opens http://localhost:8080
+.\start-all.ps1          # starts everything and opens Open WebUI in its own app window
 .\stop-all.ps1           # stops everything (leaves Comfy Desktop alone)
+.\install-shortcut.ps1   # adds a "Custom AI" Desktop and Start Menu shortcut (starts services if needed)
 .\start-computer-use.ps1 # opens UI-TARS Desktop so the AI can use your mouse and keyboard
 ```
 
 If PowerShell blocks the script: `powershell -ExecutionPolicy Bypass -File .\start-all.ps1`.
+
+Open WebUI opens as a standalone Chrome (or Edge) app window with its own profile in `data\app-profile`,
+so it gets its own taskbar entry. `.\open-app.ps1` reopens it any time; it's still at http://localhost:8080 in a normal browser.
 
 ## 💡 Using it
 
@@ -166,6 +170,7 @@ task and watch it. The stop button ends it; it only runs while the app is open.
 
 ```
 start-all.ps1 · stop-all.ps1 · start-computer-use.ps1   launch and stop everything
+open-app.ps1 · install-shortcut.ps1                     Open WebUI app window and Desktop/Start Menu shortcut
 bin/llama-models.ini         llama.cpp router presets (Qwen3.6, UI-TARS)
 bin/comfy-extra-models.yaml  ComfyUI model folders
 tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot, video jobs
