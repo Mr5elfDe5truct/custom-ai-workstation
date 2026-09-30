@@ -1,0 +1,41 @@
+{
+  "mcpServers": {
+    "workstation": {
+      "command": "C:\\Projects\\Workspaces\\Claude\\Custom AI\\envs\\tools\\Scripts\\python.exe",
+      "args": [
+        "C:\\Projects\\Workspaces\\Claude\\Custom AI\\tools\\scout_mcp.py"
+      ]
+    },
+    "fetch": {
+      "command": "C:\\Projects\\Workspaces\\Claude\\Custom AI\\envs\\tools\\Scripts\\mcp-server-fetch.exe",
+      "args": []
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "C:\\Projects\\Workspaces\\Claude\\Custom AI",
+        "C:\\Users\\ryang\\Documents",
+        "C:\\Users\\ryang\\Downloads",
+        "C:\\Users\\ryang\\Pictures"
+      ]
+    },
+    "desktop": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@wonderwhy-er/desktop-commander"
+      ]
+    },
+    "browser": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest",
+        "--browser",
+        "chrome"
+      ]
+    }
+  }
+}

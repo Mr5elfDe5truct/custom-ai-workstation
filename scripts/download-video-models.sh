@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Downloads the Wan 2.2 and LTX-2.3 video models (GGUF) into D:\CustomAI\models\comfy.
+# Resumable: re-run to continue interrupted downloads.
+set -u
+D=/d/CustomAI/models/comfy
+HF=https://huggingface.co
+mkdir -p "$D"/{unet,text_encoders,vae,loras}
+
+get() { # repo path dest
+  local out="$D/$3/$(basename "$2")"
+  echo "$(date +%T) $out"
+  curl -sfL -C - -o "$out" "$HF/$1/resolve/main/$2" || echo "FAILED $1/$2"
+}
+
+# Wan 2.2 image-to-video, LightX2V 4-step distilled (fast), 720p April 2026 build
+get jayn7/WAN2.2-I2V_A14B-DISTILL-LIGHTX2V-4STEP-GGUF high_noise_260412/wan2.2_i2v_A14b_high_noise_lightx2v_4step_720p_260412-Q4_K_M.gguf unet
+get jayn7/WAN2.2-I2V_A14B-DISTILL-LIGHTX2V-4STEP-GGUF low_noise_260412/wan2.2_i2v_A14b_low_noise_lightx2v_4step_720p_260412-Q4_K_M.gguf unet
+# Wan 2.2 text-to-video
+get QuantStack/Wan2.2-T2V-A14B-GGUF HighNoise/Wan2.2-T2V-A14B-HighNoise-Q4_K_M.gguf unet
+get QuantStack/Wan2.2-T2V-A14B-GGUF LowNoise/Wan2.2-T2V-A14B-LowNoise-Q4_K_M.gguf unet
+# Wan shared text encoder + VAE
+get Comfy-Org/Wan_2.1_ComfyUI_repackaged split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors text_encoders
+get Comfy-Org/Wan_2.1_ComfyUI_repackaged split_files/vae/wan_2.1_vae.safetensors vae
+
+# LTX-2.3 distilled (video + audio, 4-8 steps)
+get unsloth/LTX-2.3-GGUF distilled-1.1/ltx-2.3-22b-distilled-1.1-Q4_K_M.gguf unet
+get unsloth/LTX-2.3-GGUF text_encoders/ltx-2.3-22b-distilled_embeddings_connectors.safetensors text_encoders
+get unsloth/LTX-2.3-GGUF vae/ltx-2.3-22b-distilled_video_vae.safetensors vae
+get unsloth/LTX-2.3-GGUF vae/ltx-2.3-22b-distilled_audio_vae.safetensors vae
+get unsloth/gemma-3-12b-it-qat-GGUF gemma-3-12b-it-qat-UD-Q4_K_XL.gguf text_encoders
+get unsloth/gemma-3-12b-it-qat-GGUF mmproj-BF16.gguf text_encoders
+
+echo "$(date +%T) all done"
