@@ -21,5 +21,10 @@ Get-NetTCPConnection -LocalPort 8188 -State Listen -ErrorAction SilentlyContinue
     Write-Host "  stopping ComfyUI ($($_.OwningProcess))"
     Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
 }
-if (-not $KeepOllama) { Get-Process ollama -ErrorAction SilentlyContinue | Stop-Process -Force }
+if (-not $KeepOllama) {
+    Get-Process ollama -ErrorAction SilentlyContinue | Stop-Process -Force
+    # Ollama's model runner is a separate llama-server.exe that outlives "ollama serve" and keeps its VRAM.
+    Get-Process llama-server -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -like "$env:LOCALAPPDATA\Programs\Ollama\*" } | Stop-Process -Force
+}
 Write-Host "Stopped."

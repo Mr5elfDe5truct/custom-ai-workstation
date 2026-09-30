@@ -25,6 +25,11 @@ Write-Host "Starting Custom AI workstation..."
 # 1. Ollama: Gemma 4 (webcam/vision), Qwen3.5-9B uncensored, coders. Unloads after 5 min idle.
 $env:OLLAMA_MODELS = "$Root\models\ollama"
 $env:OLLAMA_KEEP_ALIVE = "5m"
+# Ollama picks 4096 tokens on a 12 GB card, which the memory + tool prompts overflow (~6k tokens
+# for a bare "Hello" in voice mode). 32k with a q8 KV cache still fits each model on the GPU.
+$env:OLLAMA_CONTEXT_LENGTH = "32768"
+$env:OLLAMA_FLASH_ATTENTION = "1"
+$env:OLLAMA_KV_CACHE_TYPE = "q8_0"
 Start-Bg "ollama" 11434 "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" "serve"
 
 # 2. llama.cpp router: Qwen3.6-35B uncensored + UI-TARS, loaded on demand, one at a time,
