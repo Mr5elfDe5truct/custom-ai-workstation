@@ -1,13 +1,16 @@
-# Adds "Custom AI" shortcuts to the Desktop and Start Menu that open Open WebUI as an app window.
-#   .\install-shortcut.ps1            create or refresh both shortcuts
+# Adds "Custom AI" shortcuts to the Desktop and Start Menu that open Open WebUI as an app window,
+# plus a "Stop Custom AI" Start Menu shortcut that runs stop-all.ps1.
+#   .\install-shortcut.ps1            create or refresh the shortcuts
 #   .\install-shortcut.ps1 -Remove    delete them
 param([switch]$Remove)
 
 $Root = $PSScriptRoot
-$Name = "Custom AI"
+$Desktop = [Environment]::GetFolderPath("Desktop")
+$StartMenu = [Environment]::GetFolderPath("Programs")
 $Links = @(
-    (Join-Path ([Environment]::GetFolderPath("Desktop")) "$Name.lnk"),
-    (Join-Path ([Environment]::GetFolderPath("Programs")) "$Name.lnk")
+    (Join-Path $Desktop "Custom AI.lnk"),
+    (Join-Path $StartMenu "Custom AI.lnk"),
+    (Join-Path $StartMenu "Stop Custom AI.lnk")
 )
 
 if ($Remove) {
@@ -24,15 +27,20 @@ New-Item -ItemType Directory -Force (Split-Path $Icon) | Out-Null
 if (-not (Test-Path $Icon) -and (Test-Path "$static\favicon.ico")) { Copy-Item "$static\favicon.ico" $Icon -Force }
 
 $shell = New-Object -ComObject WScript.Shell
-foreach ($path in $Links) {
+function New-Shortcut($path, $script, $description, $iconLocation) {
     $lnk = $shell.CreateShortcut($path)
     $lnk.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
     # Minimized, so the first launch (which starts the services) shows progress in the taskbar without a console in the way.
-    $lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File `"$Root\open-app.ps1`""
+    $lnk.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File `"$Root\$script`""
     $lnk.WorkingDirectory = $Root
-    $lnk.Description = "Open WebUI on the Custom AI workstation"
+    $lnk.Description = $description
     $lnk.WindowStyle = 7   # minimized
-    if (Test-Path $Icon) { $lnk.IconLocation = "$Icon,0" }
+    if ($iconLocation) { $lnk.IconLocation = $iconLocation }
     $lnk.Save()
     Write-Host "  created $path"
 }
+
+$appIcon = if (Test-Path $Icon) { "$Icon,0" }
+New-Shortcut $Links[0] "open-app.ps1" "Open WebUI on the Custom AI workstation" $appIcon
+New-Shortcut $Links[1] "open-app.ps1" "Open WebUI on the Custom AI workstation" $appIcon
+New-Shortcut $Links[2] "stop-all.ps1" "Stop all Custom AI services and close the window" "$env:SystemRoot\System32\shell32.dll,27"

@@ -132,15 +132,15 @@ uv venv envs\tools --python 3.12;      uv pip install -p envs\tools mcpo mcp htt
 
 ```powershell
 .\start-all.ps1          # starts everything and opens Open WebUI in its own app window
-.\stop-all.ps1           # stops everything (leaves Comfy Desktop alone)
-.\install-shortcut.ps1   # adds a "Custom AI" Desktop and Start Menu shortcut (starts services if needed)
+.\stop-all.ps1           # stops everything and closes the app window (leaves Comfy Desktop alone)
+.\install-shortcut.ps1   # adds "Custom AI" and "Stop Custom AI" shortcuts (Custom AI starts services if needed)
 .\start-computer-use.ps1 # opens UI-TARS Desktop so the AI can use your mouse and keyboard
 ```
 
 If PowerShell blocks the script: `powershell -ExecutionPolicy Bypass -File .\start-all.ps1`.
 
 Open WebUI opens as a standalone Chrome (or Edge) app window with its own profile in `data\app-profile`,
-so it gets its own taskbar entry. `.\open-app.ps1` reopens it any time; it's still at http://localhost:8080 in a normal browser.
+so it gets its own taskbar entry. Closing the window leaves the services running; use stop-all.ps1 or the Stop Custom AI shortcut to shut everything down. `.\open-app.ps1` reopens it any time; it's still at http://localhost:8080 in a normal browser.
 
 ## 💡 Using it
 
