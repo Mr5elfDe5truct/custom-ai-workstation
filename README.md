@@ -140,7 +140,7 @@ uv venv envs\tools --python 3.12;      uv pip install -p envs\tools mcpo mcp htt
 If PowerShell blocks the script: `powershell -ExecutionPolicy Bypass -File .\start-all.ps1`.
 
 Open WebUI opens as a standalone Chrome (or Edge) app window with its own profile in `data\app-profile`,
-so it gets its own taskbar entry. Closing the window leaves the services running; use stop-all.ps1 or the Stop Custom AI shortcut to shut everything down. `.\open-app.ps1` reopens it any time; it's still at http://localhost:8080 in a normal browser.
+so it gets its own taskbar entry. Closing the window shuts everything down (it runs stop-all.ps1); pass -KeepRunning to open-app.ps1 to leave the services up. `.\open-app.ps1` reopens it any time; it's still at http://localhost:8080 in a normal browser.
 
 ## 💡 Using it
 
