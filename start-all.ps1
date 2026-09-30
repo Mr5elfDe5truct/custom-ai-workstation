@@ -2,7 +2,9 @@
 #   .\start-all.ps1            everything
 #   .\start-all.ps1 -NoComfy   skip the headless ComfyUI (use this if you prefer the Comfy Desktop app)
 #   .\start-all.ps1 -NoBrowser don't open the app window at the end
-param([switch]$NoComfy, [switch]$NoBrowser)
+#   .\start-all.ps1 -Theme neon default theme: dragon, neon, glass, hud or off (Ctrl+Alt+T switches in the app)
+param([switch]$NoComfy, [switch]$NoBrowser,
+      [ValidateSet("dragon", "neon", "glass", "hud", "off")][string]$Theme = "dragon")
 
 $Root = $PSScriptRoot
 $Logs = Join-Path $Root "logs"
@@ -92,6 +94,16 @@ $env:ENABLE_IMAGE_GENERATION = "True"
 $env:IMAGE_GENERATION_ENGINE = "comfyui"
 $env:COMFYUI_BASE_URL = "http://127.0.0.1:8188"
 $env:TOOL_SERVER_CONNECTIONS = '[{"url":"http://127.0.0.1:8200/workstation","path":"openapi.json","auth_type":"none","key":"","config":{"enable":true},"info":{"id":"workstation","name":"workstation"}},{"url":"http://127.0.0.1:8200/fetch","path":"openapi.json","auth_type":"none","key":"","config":{"enable":true},"info":{"id":"fetch","name":"fetch"}},{"url":"http://127.0.0.1:8200/filesystem","path":"openapi.json","auth_type":"none","key":"","config":{"enable":true},"info":{"id":"filesystem","name":"filesystem"}},{"url":"http://127.0.0.1:8200/desktop","path":"openapi.json","auth_type":"none","key":"","config":{"enable":true},"info":{"id":"desktop","name":"desktop"}},{"url":"http://127.0.0.1:8200/browser","path":"openapi.json","auth_type":"none","key":"","config":{"enable":true},"info":{"id":"browser","name":"browser"}}]'
+# Theme: Open WebUI serves /static/custom.css and /static/loader.js on every page, refilling its static folder
+# from frontend\static at startup. Copy ours into both so they survive updates and apply without a restart.
+$owui = "$Root\envs\open-webui\Lib\site-packages\open_webui"
+$loader = "window.CAI_DEFAULT_THEME = '$Theme';`n" + (Get-Content -Raw "$Root\theme\loader.js")
+foreach ($dir in "$owui\frontend\static", "$owui\static") {
+    if (Test-Path $dir) {
+        Copy-Item "$Root\theme\custom.css" "$dir\custom.css" -Force
+        Set-Content -Path "$dir\loader.js" -Value $loader -Encoding UTF8
+    }
+}
 Start-Bg "open-webui" 8080 "$Root\envs\open-webui\Scripts\open-webui.exe" "serve --host 127.0.0.1 --port 8080"
 
 Write-Host "Waiting for Open WebUI..."

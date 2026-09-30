@@ -149,6 +149,17 @@ installed), using a separate profile in `data\app-profile` so it gets its own ta
 - The **Stop Custom AI** Start Menu shortcut stops everything without opening the window.
 - Open WebUI is still at http://localhost:8080 in any browser.
 
+**Themes:** Open WebUI gets a custom look, **Dragon Red & Gold** by default (black and crimson with gold highlights and a red glow).
+Three more are built in: **Cyberpunk Neon**, **Glass** (frosted panels over a colored backdrop) and **Terminal HUD** (green on black).
+
+<p align="center"><img src="docs/assets/theme-dragon-chat.jpg" alt="Dragon Red &amp; Gold theme" width="80%"></p>
+
+- Switch with the palette button in the bottom-right corner, or press **Ctrl+Alt+T** to cycle. The choice is remembered.
+- Pick the startup default with `.\start-all.ps1 -Theme dragon|neon|glass|hud|off` (`off` is Open WebUI's own look).
+- Themes apply in Open WebUI's dark mode (Settings → General → Theme: Dark or System). OLED Dark overrides the colors.
+- The theme lives in `theme/`. `start-all.ps1` copies it into Open WebUI's `custom.css` and `loader.js` on every start,
+  so it survives `uv pip install -U open-webui`.
+
 ## 💡 Using it
 
 - **Pick a model** at the top of the chat. Qwen3.6 35B is the best all-rounder; its first message after idling takes ~30–60 s to load.
@@ -184,6 +195,7 @@ tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot
 tools/mcpo-config.json       MCP servers exposed to Open WebUI through mcpo
 workflows/*.api.json         ComfyUI API workflows (Z-Image-Turbo, LTX-2.3, Wan 2.2)
 scripts/                     video model downloader, ComfyUI workflow runner
+theme/custom.css · loader.js  Open WebUI themes and the theme switcher
 docs/assets/                 README art and samples
 PLAN.md                      design notes, component choices and sources
 ```
