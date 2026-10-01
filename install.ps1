@@ -352,5 +352,8 @@ if (-not $NoTest) {
 Write-Host ""
 Write-Host "  Done. The Workstation is in $Root" -ForegroundColor Green
 Write-Host "  Open Prestige (or the 'Custom AI' shortcut) to start it; closing the window stops it." -ForegroundColor Gray
+if ($Root -ne (Join-Path $env:USERPROFILE "RG Studios\Workstation")) {
+    Write-Host "  In Prestige, set Settings > Workstation folder to $Root (it looks in your user folder by default)." -ForegroundColor Yellow
+}
 Write-Host "  Add model packs any time: .\install.ps1 -Packs vision,video" -ForegroundColor Gray
 Write-Host ""
