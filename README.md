@@ -87,7 +87,7 @@ stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe
 | 8080 | Open WebUI | the app you use |
 | 11434 | Ollama | Gemma 4, Qwen3.5 9B, coders; unloads after 5 min idle |
 | 8081 | llama.cpp router | Qwen3.6 35B and UI-TARS, one at a time; unloads after 3 min idle (`bin/llama-models.ini`) |
-| 8188 | ComfyUI (headless) | uses Comfy Desktop's install; frees the GPU after each job |
+| 8188 | ComfyUI (headless) | its own install, or Comfy Desktop's; frees the GPU after each job |
 | 8880 | Kokoro | text-to-speech on CPU |
 | 8200 | mcpo tool server | research, webcam, fetch, video jobs, files, shell, browser (`tools/mcpo-config.json`) |
 
@@ -110,33 +110,45 @@ The 12 GB GPU holds one big model at a time. Everything unloads when idle, so ch
 
 ## 🚀 Quick start
 
-This repo holds the glue: launch scripts, configs, ComfyUI workflows, and the custom tool server. The apps and
-model weights are installed separately (see [PLAN.md](PLAN.md) for the full build log and every source).
+This repo holds the glue: launch scripts, configs, ComfyUI workflows, and the custom tool server. The installer
+adds everything else (see [PLAN.md](PLAN.md) for the full build log and every source).
 
-**1. Prerequisites** (all free): NVIDIA driver, [uv](https://github.com/astral-sh/uv), Python 3.12, Node.js, git,
-ffmpeg, [Ollama](https://ollama.com), [Comfy Desktop](https://www.comfy.org/download) with the
-[ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF) node, and eSpeak NG for Kokoro.
-
-**2. Clone and add the apps** into the same folder:
+**1. Install.** You need Windows 10/11 (64-bit), an NVIDIA GPU with a current driver, and
+[winget](https://aka.ms/getwinget) (built into Windows 11). Download [`setup.cmd`](setup.cmd) and
+[`install.ps1`](install.ps1) into one folder and double-click **setup.cmd**, or from PowerShell:
 
 ```powershell
-git clone https://github.com/Mr5elfDe5truct/custom-ai-workstation "$env:USERPROFILE\RG Studios\Workstation"
-cd "$env:USERPROFILE\RG Studios\Workstation"
-uv venv envs\open-webui --python 3.12; uv pip install -p envs\open-webui open-webui
-uv venv envs\tools --python 3.12;      uv pip install -p envs\tools mcpo mcp httpx opencv-python mcp-server-fetch
-# llama.cpp Windows CUDA build  -> bin\llama.cpp\
-# Kokoro-FastAPI (+ envs\kokoro) -> apps\Kokoro-FastAPI\
-# UI-TARS Desktop                -> apps\ui-tars-desktop\
+irm https://raw.githubusercontent.com/Mr5elfDe5truct/custom-ai-workstation/main/install.ps1 -OutFile "$env:TEMP\install.ps1"
+powershell -ExecutionPolicy Bypass -File "$env:TEMP\install.ps1"
 ```
 
-**3. Get the models:** GGUFs into `models\gguf\`, `ollama pull` the Ollama models, and the video models with
-`bash scripts/download-video-models.sh` (resumable).
+It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`) and asks which model packs to get:
 
-**4. Point the configs at your paths:** `bin/llama-models.ini`, `bin/comfy-extra-models.yaml` and
-`tools/mcpo-config.json` use absolute Windows paths from the reference PC (`C:\Users\ryang\RG Studios\Workstation`).
+| Pack | What it adds | Size |
+|---|---|---|
+| `fast` | Qwen3.5 9B Uncensored (Ollama) | 6.7 GB |
+| `vision` | Gemma 4 12B (Ollama) | 8 GB |
+| `main` | Qwen3.6 35B-A3B Heretic + vision (llama.cpp, needs 32 GB RAM) | 22 GB |
+| `images` | Z-Image-Turbo (ComfyUI) | 21 GB |
+| `video` | Wan 2.2 image-to-video and LTX-2.3 text-to-video (ComfyUI GGUF) | 52 GB |
+| `computer` | UI-TARS 1.5 7B (llama.cpp) | 7 GB |
+
+Along the way it installs git, uv, Node.js, ffmpeg, Ollama and eSpeak NG with winget; the newest llama.cpp CUDA build;
+the Python envs for Open WebUI, the tool server and Kokoro (from the pinned lists in `requirements\`); ComfyUI with the
+GGUF and KJNodes nodes (or reuses Comfy Desktop if you have it); the Desktop and Start Menu shortcuts; and
+[Prestige](https://github.com/Mr5elfDe5truct/prestige). Then it starts everything once to check it works. Downloads
+resume, so you can run it again to add packs or finish an interrupted install. Options:
+
+```powershell
+.\install.ps1 -Packs fast,images -Yes     # no questions
+.\install.ps1 -Packs none                 # software only, no models
+.\install.ps1 -NoPrestige -NoShortcuts    # skip the Prestige app and shortcuts
+```
+
+The configs use `{ROOT}` for the install folder; `start-all.ps1` writes the real paths to `data\runtime` on each start.
 The workstation lives in your user folder, not Program Files, because its services write logs, data and models into it.
 
-**5. Start it:**
+**2. Start it:**
 
 ```powershell
 .\start-all.ps1          # starts everything and opens Open WebUI in its own app window
@@ -197,8 +209,9 @@ task and watch it. The stop button ends it; it only runs while the app is open.
 ```
 start-all.ps1 · stop-all.ps1 · start-computer-use.ps1   launch and stop everything
 open-app.ps1 · install-shortcut.ps1                     Open WebUI app window and Desktop/Start Menu shortcut
+install.ps1 · setup.cmd       installer (setup.cmd runs install.ps1)
 bin/llama-models.ini         llama.cpp router presets (Qwen3.6, UI-TARS)
-bin/comfy-extra-models.yaml  ComfyUI model folders
+requirements/*.txt           pinned Python packages for the installer
 tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot, video jobs
 tools/mcpo-config.json       MCP servers exposed to Open WebUI through mcpo
 workflows/*.api.json         ComfyUI API workflows (Z-Image-Turbo, LTX-2.3, Wan 2.2)

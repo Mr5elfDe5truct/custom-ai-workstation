@@ -8,6 +8,8 @@
 !/scripts/
 !/tools/
 !/workflows/
+!/requirements/
+!/setup.cmd
 !/theme/
 !/docs/
 !/bin/

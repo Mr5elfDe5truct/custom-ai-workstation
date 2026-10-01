@@ -1,13 +1,13 @@
 {
   "mcpServers": {
     "workstation": {
-      "command": "C:\\Users\\ryang\\RG Studios\\Workstation\\envs\\tools\\Scripts\\python.exe",
+      "command": "{ROOT}\\envs\\tools\\Scripts\\python.exe",
       "args": [
-        "C:\\Users\\ryang\\RG Studios\\Workstation\\tools\\scout_mcp.py"
+        "{ROOT}\\tools\\scout_mcp.py"
       ]
     },
     "fetch": {
-      "command": "C:\\Users\\ryang\\RG Studios\\Workstation\\envs\\tools\\Scripts\\mcp-server-fetch.exe",
+      "command": "{ROOT}\\envs\\tools\\Scripts\\mcp-server-fetch.exe",
       "args": []
     },
     "filesystem": {
@@ -15,10 +15,10 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "C:\\Users\\ryang\\RG Studios\\Workstation",
-        "C:\\Users\\ryang\\Documents",
-        "C:\\Users\\ryang\\Downloads",
-        "C:\\Users\\ryang\\Pictures"
+        "{ROOT}",
+        "{HOME}\\Documents",
+        "{HOME}\\Downloads",
+        "{HOME}\\Pictures"
       ]
     },
     "desktop": {
