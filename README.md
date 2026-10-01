@@ -71,6 +71,13 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | 🎬 | **Video** | LTX-2.3 text-to-video with audio, Wan 2.2 image-to-video, as background jobs |
 | 🗂️ | **Shared long-term memory** | every model reads and writes the same memory; chats are saved |
 
+## 🎩 Prestige desktop app
+
+**[Prestige by R.G. Studios](https://github.com/Mr5elfDe5truct/prestige)** is a native Windows app for this stack, an alternative to the
+Open WebUI window. It has streaming chat with every model, shared memory, a System dashboard with model load and unload, a Studio gallery
+with image and video generation, voice conversation with an animated avatar, and webcam vision. Opening it starts the stack, and closing it
+stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe5truct/prestige/releases) page.
+
 ## 🏗️ How it fits together
 
 <p align="center"><img src="docs/assets/architecture.svg" alt="Architecture diagram" width="100%"></p>
