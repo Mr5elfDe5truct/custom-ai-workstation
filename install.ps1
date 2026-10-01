@@ -90,7 +90,7 @@ $cudaMajor = 0; $gpuName = $null; $vramGB = 0
 if (Has nvidia-smi) {
     $q = (& nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits | Select-Object -First 1) -split ","
     $gpuName = $q[0].Trim(); $vramGB = [math]::Round([double]$q[1] / 1024)
-    $cv = [regex]::Match((& nvidia-smi | Out-String), "CUDA Version:\s*([\d.]+)").Groups[1].Value
+    $cv = [regex]::Match((& nvidia-smi | Out-String), "CUDA (?:UMD )?Version:\s*([\d.]+)").Groups[1].Value
     $cudaMajor = if ($cv) { [int]($cv.Split(".")[0]) } else { 12 }
     Ok "$gpuName, $vramGB GB VRAM, driver supports CUDA $cv"
     if ($vramGB -lt 8) { Warn "Less than 8 GB of VRAM: stick to the small models" }
@@ -142,6 +142,8 @@ if (-not $Packs) {
         })
     }
 }
+# -Packs fast,images arrives as one string when run with -File (setup.cmd), so split it here too.
+$Packs = @(foreach ($t in ($Packs -split "[,\s]+" | Where-Object { $_ })) { if ($t -eq "all") { @($PackInfo.Keys) } else { $t.ToLower() } })
 $Packs = @($Packs | Where-Object { $_ -and $_ -ne "none" } | Select-Object -Unique)
 foreach ($p in $Packs) { if (-not $PackInfo.Contains($p)) { throw "Unknown model pack '$p'. Choose from: $($PackInfo.Keys -join ', '), all, none" } }
 if ($Packs -contains "main" -and $ramGB -lt 32) { Warn "The main model wants 32 GB of RAM; with $ramGB GB it may not load." }
