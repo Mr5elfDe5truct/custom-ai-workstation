@@ -71,6 +71,13 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | 🎬 | **Video** | LTX-2.3 text-to-video with audio, Wan 2.2 image-to-video, as background jobs |
 | 🗂️ | **Shared long-term memory** | every model reads and writes the same memory; chats are saved |
 
+## 🎩 Prestige desktop app
+
+**[Prestige by R.G. Studios](https://github.com/Mr5elfDe5truct/prestige)** is a native Windows app for this stack, an alternative to the
+Open WebUI window. It has streaming chat with every model, shared memory, a System dashboard with model load and unload, a Studio gallery
+with image and video generation, voice conversation with an animated avatar, and webcam vision. Opening it starts the stack, and closing it
+stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe5truct/prestige/releases) page.
+
 ## 🏗️ How it fits together
 
 <p align="center"><img src="docs/assets/architecture.svg" alt="Architecture diagram" width="100%"></p>
@@ -113,8 +120,8 @@ ffmpeg, [Ollama](https://ollama.com), [Comfy Desktop](https://www.comfy.org/down
 **2. Clone and add the apps** into the same folder:
 
 ```powershell
-git clone https://github.com/Mr5elfDe5truct/custom-ai-workstation "Custom AI"
-cd "Custom AI"
+git clone https://github.com/Mr5elfDe5truct/custom-ai-workstation "$env:USERPROFILE\RG Studios\Workstation"
+cd "$env:USERPROFILE\RG Studios\Workstation"
 uv venv envs\open-webui --python 3.12; uv pip install -p envs\open-webui open-webui
 uv venv envs\tools --python 3.12;      uv pip install -p envs\tools mcpo mcp httpx opencv-python mcp-server-fetch
 # llama.cpp Windows CUDA build  -> bin\llama.cpp\
@@ -126,7 +133,8 @@ uv venv envs\tools --python 3.12;      uv pip install -p envs\tools mcpo mcp htt
 `bash scripts/download-video-models.sh` (resumable).
 
 **4. Point the configs at your paths:** `bin/llama-models.ini`, `bin/comfy-extra-models.yaml` and
-`tools/mcpo-config.json` use absolute Windows paths from the reference PC.
+`tools/mcpo-config.json` use absolute Windows paths from the reference PC (`C:\Users\ryang\RG Studios\Workstation`).
+The workstation lives in your user folder, not Program Files, because its services write logs, data and models into it.
 
 **5. Start it:**
 
