@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Downloads the Wan 2.2 and LTX-2.3 video models (GGUF) into D:\CustomAI\models\comfy.
+# Downloads the Wan 2.2 and LTX-2.3 video models (GGUF) into the workstation's models\comfy folder.
 # Resumable: re-run to continue interrupted downloads.
 set -u
-D=/d/CustomAI/models/comfy
+D="$(cd "$(dirname "$0")/.." && pwd)/models/comfy"
 HF=https://huggingface.co
 mkdir -p "$D"/{unet,text_encoders,vae,loras}
 

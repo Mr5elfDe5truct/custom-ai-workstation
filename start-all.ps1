@@ -9,7 +9,74 @@ param([switch]$NoComfy, [switch]$NoBrowser,
 $Root = $PSScriptRoot
 $Logs = Join-Path $Root "logs"
 New-Item -ItemType Directory -Force $Logs | Out-Null
-$ComfyInstall = "$env:LOCALAPPDATA\Comfy-Desktop\ComfyUI-Installs\My Anime Workflow"
+
+# ---------- configs for this folder ----------
+# bin\llama-models.ini and tools\mcpo-config.json use {ROOT} (this folder) and {HOME} (the user's profile), so the
+# workstation runs from wherever it's installed. The real files are written to data\runtime on every start.
+$Runtime = Join-Path $Root "data\runtime"
+New-Item -ItemType Directory -Force $Runtime | Out-Null
+function Expand-Template($src, $dst, [switch]$Json) {
+    $r = $Root; $h = $env:USERPROFILE
+    if ($Json) { $r = $r.Replace('\', '\\'); $h = $h.Replace('\', '\\') }
+    $text = (Get-Content -Raw $src).Replace('{ROOT}', $r).Replace('{HOME}', $h)
+    [IO.File]::WriteAllText($dst, $text, (New-Object Text.UTF8Encoding $false))
+}
+Expand-Template "$Root\bin\llama-models.ini" "$Runtime\llama-models.ini"
+Expand-Template "$Root\tools\mcpo-config.json" "$Runtime\mcpo-config.json" -Json
+
+# ComfyUI: the one install.ps1 puts in apps\ComfyUI, or else an existing Comfy Desktop install.
+$ComfyDir = $null; $ComfyPython = $null
+if (Test-Path "$Root\apps\ComfyUI\main.py") {
+    $ComfyDir = "$Root\apps\ComfyUI"; $ComfyPython = "$Root\envs\comfyui\Scripts\python.exe"
+} else {
+    # With several Comfy Desktop installs, use the one that has the GGUF nodes, then the most recently used.
+    $desk = Get-ChildItem "$env:LOCALAPPDATA\Comfy-Desktop\ComfyUI-Installs" -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path "$($_.FullName)\ComfyUI\.venv\Scripts\python.exe" } |
+        Sort-Object @{ Expression = { Test-Path "$($_.FullName)\ComfyUI\custom_nodes\ComfyUI-GGUF" }; Descending = $true },
+                    @{ Expression = { (Get-Item "$($_.FullName)\ComfyUI\custom_nodes").LastWriteTime }; Descending = $true } |
+        Select-Object -First 1
+    if ($desk) { $ComfyDir = "$($desk.FullName)\ComfyUI"; $ComfyPython = "$ComfyDir\.venv\Scripts\python.exe" }
+}
+# Model folders ComfyUI should see: the workstation's models\comfy, plus Comfy Desktop's shared models if present.
+$yaml = @"
+# Written by start-all.ps1 on every start.
+workstation:
+  base_path: $Root\models\comfy
+  checkpoints: checkpoints/
+  diffusion_models: |
+    diffusion_models/
+    unet/
+  unet: unet/
+  text_encoders: text_encoders/
+  clip: text_encoders/
+  vae: vae/
+  loras: loras/
+  latent_upscale_models: latent_upscale_models/
+  upscale_models: upscale_models/
+"@
+$shared = "$env:LOCALAPPDATA\Comfy-Desktop\ComfyUI-Shared\models"
+if (Test-Path $shared) {
+    $yaml += @"
+
+comfy_desktop_shared:
+  base_path: $shared
+  is_default: true
+  checkpoints: checkpoints/
+  diffusion_models: diffusion_models/
+  unet: unet/
+  text_encoders: text_encoders/
+  clip: clip/
+  clip_vision: clip_vision/
+  vae: vae/
+  loras: loras/
+  upscale_models: upscale_models/
+  latent_upscale_models: latent_upscale_models/
+  audio_encoders: audio_encoders/
+  controlnet: controlnet/
+  embeddings: embeddings/
+"@
+}
+[IO.File]::WriteAllText("$Runtime\comfy-extra-models.yaml", $yaml, (New-Object Text.UTF8Encoding $false))
 
 function Test-Port($port) {
     [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
@@ -37,7 +104,7 @@ Start-Bg "ollama" 11434 "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" "serve"
 # 2. llama.cpp router: Qwen3.6-35B uncensored + UI-TARS, loaded on demand, one at a time,
 #    unloaded after 3 min idle so ComfyUI gets the GPU back.
 Start-Bg "llama-server" 8081 "$Root\bin\llama.cpp\llama-server.exe" @(
-    "--models-preset", "`"$Root\bin\llama-models.ini`"", "--models-max", "1",
+    "--models-preset", "`"$Runtime\llama-models.ini`"", "--models-max", "1",
     "--sleep-idle-seconds", "180", "--host", "127.0.0.1", "--port", "8081")
 
 # 3. Kokoro text-to-speech (CPU).
@@ -56,15 +123,17 @@ Remove-Item Env:PYTHONPATH
 
 # 4. Tool server: research scout, webcam, video jobs, web fetch, files, shell (Desktop Commander), browser (Playwright).
 Start-Bg "mcpo" 8200 "$Root\envs\tools\Scripts\mcpo.exe" `
-    "--host 127.0.0.1 --port 8200 --config `"$Root\tools\mcpo-config.json`""
+    "--host 127.0.0.1 --port 8200 --config `"$Runtime\mcpo-config.json`""
 
 # 5. ComfyUI (images + video), headless, using Comfy Desktop's install and both model folders.
 #    --disable-smart-memory moves models off the GPU after each job so the chat models can use it.
-if (-not $NoComfy) {
-    Start-Bg "comfyui" 8188 "$ComfyInstall\ComfyUI\.venv\Scripts\python.exe" @(
+if (-not $NoComfy -and $ComfyDir) {
+    Start-Bg "comfyui" 8188 $ComfyPython @(
         "main.py", "--listen", "127.0.0.1", "--port", "8188", "--disable-smart-memory",
-        "--extra-model-paths-config", "`"$Root\bin\comfy-extra-models.yaml`"",
-        "--output-directory", "`"$Root\data\comfy-output`"") "$ComfyInstall\ComfyUI"
+        "--extra-model-paths-config", "`"$Runtime\comfy-extra-models.yaml`"",
+        "--output-directory", "`"$Root\data\comfy-output`"") $ComfyDir
+} elseif (-not $NoComfy) {
+    Write-Host "  ComfyUI isn't installed (run install.ps1), so images and video are off"
 }
 
 # 6. Open WebUI (single user, only reachable from this PC).
