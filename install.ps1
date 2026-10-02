@@ -255,7 +255,7 @@ if (-not (Test-Path "$kokoro\api")) {
     git -C $kokoro checkout -q b4ef64b1ce60682debda4fe0a066259e284eb1b4
     Ok "Kokoro-FastAPI"
 }
-New-Env "kokoro" "3.12" "kokoro.txt" @("--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match")
+New-Env "kokoro" "3.12" "kokoro.txt" @("--override", (Join-Path $Root "requirements\kokoro-overrides.txt"), "--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match")
 & uv pip install -p (Join-Path $Root "envs\kokoro") --no-deps -e $kokoro -q
 $voiceModel = "$kokoro\api\src\models\v1_0"
 Download (HF "hexgrad/Kokoro-82M" "kokoro-v1_0.pth") "$voiceModel\kokoro-v1_0.pth"
