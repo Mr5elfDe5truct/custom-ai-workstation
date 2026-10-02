@@ -80,7 +80,6 @@ pydantic==2.10.4
 pydantic-core==2.27.2
 pydantic-settings==2.7.0
 pygments==2.21.0
-pyopenjtalk==0.4.1
 pyopenjtalk-plus==0.4.1.post9
 pyparsing==3.3.2
 pypinyin==0.55.0

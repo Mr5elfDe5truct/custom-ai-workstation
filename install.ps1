@@ -19,6 +19,7 @@ param(
     [switch]$NoTest,
     [switch]$NoShortcuts,     # leave the Desktop / Start Menu shortcuts alone
     [switch]$NoComfyDesktop,  # install ComfyUI into the workstation even if Comfy Desktop is present
+    [switch]$NoGpuCheck,      # carry on without an NVIDIA GPU (for testing the installer, e.g. in Windows Sandbox)
     [string]$Branch = "main"
 )
 $ErrorActionPreference = "Stop"
@@ -52,13 +53,45 @@ function Refresh-Path {
 }
 function Has($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 
-function Winget($id, $name, $cmd) {
-    if ($cmd -and (Has $cmd)) { Skip "$name already installed"; return }
-    if (-not (Has winget)) { throw "winget isn't available. Install 'App Installer' from the Microsoft Store, then run this again." }
+# winget comes with Windows 11 and recent Windows 10. Where it's missing (older Windows 10, Windows Sandbox,
+# LTSC), install App Installer and its dependencies from Microsoft's winget-cli releases on GitHub.
+function Ensure-Winget {
+    if (Has winget.exe) { return }
+    Say "    winget is missing; installing it from github.com/microsoft/winget-cli…"
+    $rel = Invoke-RestMethod "https://api.github.com/repos/microsoft/winget-cli/releases/latest" -Headers @{ "User-Agent" = "rg-installer" }
+    $tmp = Join-Path $env:TEMP "rg-winget"
+    New-Item -ItemType Directory -Force $tmp | Out-Null
+    foreach ($n in "DesktopAppInstaller_Dependencies.zip", "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle") {
+        $a = $rel.assets | Where-Object { $_.name -eq $n }
+        if (-not $a) { throw "Couldn't find $n in the winget release. Install 'App Installer' from the Microsoft Store, then run this again." }
+        Download $a.browser_download_url (Join-Path $tmp $n)
+    }
+    Expand-Archive (Join-Path $tmp "DesktopAppInstaller_Dependencies.zip") (Join-Path $tmp "deps") -Force
+    $deps = @(Get-ChildItem (Join-Path $tmp "deps") -Recurse -Include *.appx, *.msix | Where-Object { $_.Directory.Name -eq "x64" })
+    if (-not $deps) { throw "The winget dependencies download had no x64 packages. Install 'App Installer' from the Microsoft Store, then run this again." }
+    foreach ($d in $deps) {
+        try { Add-AppxPackage -Path $d.FullName -ErrorAction Stop; Ok $d.BaseName }
+        catch { Warn "$($d.BaseName): $($_.Exception.Message.Split([char]10)[0])" }   # usually a newer version is already there
+    }
+    Add-AppxPackage -Path (Join-Path $tmp "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle")
+    $env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
+    if (-not (Has winget.exe)) { throw "winget still isn't available. Install 'App Installer' from the Microsoft Store, then run this again." }
+    Ok "winget $(winget.exe --version)"
+}
+
+function Install-Tool($id, $name, $cmd, $exists) {
+    if (($cmd -and (Has $cmd)) -or ($exists -and (Test-Path $exists))) { Skip "$name already installed"; return }
+    Ensure-Winget
     Say "    installing $name…"
-    winget install --id $id -e --silent --accept-package-agreements --accept-source-agreements | Out-Null
+    winget.exe install --id $id -e --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
+    $code = $LASTEXITCODE
     Refresh-Path
-    if ($cmd -and -not (Has $cmd)) { Warn "$name installed, but '$cmd' isn't on PATH yet; a new terminal may be needed" } else { Ok "$name installed" }
+    if ($cmd -and -not (Has $cmd)) {
+        if ($code) { throw "Installing $name failed (winget exit code $code). Run this again, or install it yourself: winget install $id" }
+        Warn "$name installed, but '$cmd' isn't on PATH yet; a new terminal may be needed"
+    } elseif ($exists -and -not (Test-Path $exists)) {
+        throw "Installing $name failed (winget exit code $code). Run this again, or install it yourself: winget install $id"
+    } else { Ok "$name installed" }
 }
 
 # Resumable download with curl.exe (ships with Windows 10/11).
@@ -96,7 +129,7 @@ if (Has nvidia-smi) {
     if ($vramGB -lt 8) { Warn "Less than 8 GB of VRAM: stick to the small models" }
 } else {
     Warn "No NVIDIA GPU found (nvidia-smi is missing). The stack needs an NVIDIA GPU with a recent driver."
-    if (-not (AskYesNo "Continue anyway?" $false)) { exit 1 }
+    if (-not $NoGpuCheck -and -not (AskYesNo "Continue anyway?" $false)) { exit 1 }
     $cudaMajor = 12
 }
 $cudaTag = if ($cudaMajor -ge 13) { "13.4" } else { "12.4" }      # llama.cpp build
@@ -159,12 +192,14 @@ if (-not $Yes -and -not (AskYesNo "Ready to install?" $true)) { exit 0 }
 
 # ---------- 4. tools ----------
 Step 4 "Installing tools (winget)"
-Winget "Git.Git" "Git" "git"
-Winget "astral-sh.uv" "uv (Python environments)" "uv"
-Winget "OpenJS.NodeJS.LTS" "Node.js (tool servers)" "node"
-Winget "Gyan.FFmpeg" "FFmpeg (audio and video)" "ffmpeg"
-Winget "Ollama.Ollama" "Ollama" "ollama"
-if (Test-Path "$env:ProgramFiles\eSpeak NG\libespeak-ng.dll") { Skip "eSpeak NG already installed" } else { Winget "eSpeak-NG.eSpeak-NG" "eSpeak NG (voice)" $null }
+# llama.cpp, PyTorch and ComfyUI need the Visual C++ runtime, which a clean Windows may not have.
+Install-Tool "Microsoft.VCRedist.2015+.x64" "Visual C++ runtime" $null "$env:windir\System32\vcruntime140_1.dll"
+Install-Tool "Git.Git" "Git" "git"
+Install-Tool "astral-sh.uv" "uv (Python environments)" "uv"
+Install-Tool "OpenJS.NodeJS.LTS" "Node.js (tool servers)" "node"
+Install-Tool "Gyan.FFmpeg" "FFmpeg (audio and video)" "ffmpeg"
+Install-Tool "Ollama.Ollama" "Ollama" "ollama"
+Install-Tool "eSpeak-NG.eSpeak-NG" "eSpeak NG (voice)" $null "$env:ProgramFiles\eSpeak NG\libespeak-ng.dll"
 
 # ---------- 5. the workstation files ----------
 Step 5 "Getting the Workstation"
@@ -206,8 +241,11 @@ function New-Env($name, $python, $req, [string[]]$extra) {
     $envDir = Join-Path $Root "envs\$name"
     if (Test-Path "$envDir\Scripts\python.exe") { Skip "$name already set up"; return }
     & uv venv $envDir --python $python -q
-    & uv pip install -p $envDir -r (Join-Path $Root "requirements\$req") @extra -q
-    if ($LASTEXITCODE) { throw "Installing the $name environment failed" }
+    Push-Location $Root   # relative paths: uv splits --override values on spaces, as in "RG Studios"
+    & uv pip install -p $envDir -r "requirements\$req" @extra -q
+    $code = $LASTEXITCODE
+    Pop-Location
+    if ($code) { throw "Installing the $name environment failed" }
     Ok $name
 }
 New-Env "open-webui" "3.11" "open-webui.txt"
@@ -220,7 +258,7 @@ if (-not (Test-Path "$kokoro\api")) {
     git -C $kokoro checkout -q b4ef64b1ce60682debda4fe0a066259e284eb1b4
     Ok "Kokoro-FastAPI"
 }
-New-Env "kokoro" "3.12" "kokoro.txt" @("--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match")
+New-Env "kokoro" "3.12" "kokoro.txt" @("--override", "requirements\kokoro-overrides.txt", "--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match")
 & uv pip install -p (Join-Path $Root "envs\kokoro") --no-deps -e $kokoro -q
 $voiceModel = "$kokoro\api\src\models\v1_0"
 Download (HF "hexgrad/Kokoro-82M" "kokoro-v1_0.pth") "$voiceModel\kokoro-v1_0.pth"
