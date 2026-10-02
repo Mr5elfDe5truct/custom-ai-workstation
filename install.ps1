@@ -56,7 +56,7 @@ function Has($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 # winget comes with Windows 11 and recent Windows 10. Where it's missing (older Windows 10, Windows Sandbox,
 # LTSC), install App Installer and its dependencies from Microsoft's winget-cli releases on GitHub.
 function Ensure-Winget {
-    if (Has winget) { return }
+    if (Has winget.exe) { return }
     Say "    winget is missing; installing it from github.com/microsoft/winget-cli…"
     $rel = Invoke-RestMethod "https://api.github.com/repos/microsoft/winget-cli/releases/latest" -Headers @{ "User-Agent" = "rg-installer" }
     $tmp = Join-Path $env:TEMP "rg-winget"
@@ -71,15 +71,15 @@ function Ensure-Winget {
     foreach ($d in $deps) { try { Add-AppxPackage -Path $d.FullName -ErrorAction Stop } catch { } }   # newer versions may already be there
     Add-AppxPackage -Path (Join-Path $tmp "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle")
     $env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
-    if (-not (Has winget)) { throw "winget still isn't available. Install 'App Installer' from the Microsoft Store, then run this again." }
-    Ok "winget $(winget --version)"
+    if (-not (Has winget.exe)) { throw "winget still isn't available. Install 'App Installer' from the Microsoft Store, then run this again." }
+    Ok "winget $(winget.exe --version)"
 }
 
-function Winget($id, $name, $cmd, $exists) {
+function Install-Tool($id, $name, $cmd, $exists) {
     if (($cmd -and (Has $cmd)) -or ($exists -and (Test-Path $exists))) { Skip "$name already installed"; return }
     Ensure-Winget
     Say "    installing $name…"
-    winget install --id $id -e --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
+    winget.exe install --id $id -e --source winget --silent --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Null
     $code = $LASTEXITCODE
     Refresh-Path
     if ($cmd -and -not (Has $cmd)) {
@@ -189,13 +189,13 @@ if (-not $Yes -and -not (AskYesNo "Ready to install?" $true)) { exit 0 }
 # ---------- 4. tools ----------
 Step 4 "Installing tools (winget)"
 # llama.cpp, PyTorch and ComfyUI need the Visual C++ runtime, which a clean Windows may not have.
-Winget "Microsoft.VCRedist.2015+.x64" "Visual C++ runtime" $null "$env:windir\System32\vcruntime140_1.dll"
-Winget "Git.Git" "Git" "git"
-Winget "astral-sh.uv" "uv (Python environments)" "uv"
-Winget "OpenJS.NodeJS.LTS" "Node.js (tool servers)" "node"
-Winget "Gyan.FFmpeg" "FFmpeg (audio and video)" "ffmpeg"
-Winget "Ollama.Ollama" "Ollama" "ollama"
-Winget "eSpeak-NG.eSpeak-NG" "eSpeak NG (voice)" $null "$env:ProgramFiles\eSpeak NG\libespeak-ng.dll"
+Install-Tool "Microsoft.VCRedist.2015+.x64" "Visual C++ runtime" $null "$env:windir\System32\vcruntime140_1.dll"
+Install-Tool "Git.Git" "Git" "git"
+Install-Tool "astral-sh.uv" "uv (Python environments)" "uv"
+Install-Tool "OpenJS.NodeJS.LTS" "Node.js (tool servers)" "node"
+Install-Tool "Gyan.FFmpeg" "FFmpeg (audio and video)" "ffmpeg"
+Install-Tool "Ollama.Ollama" "Ollama" "ollama"
+Install-Tool "eSpeak-NG.eSpeak-NG" "eSpeak NG (voice)" $null "$env:ProgramFiles\eSpeak NG\libespeak-ng.dll"
 
 # ---------- 5. the workstation files ----------
 Step 5 "Getting the Workstation"
