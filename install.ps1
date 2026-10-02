@@ -152,8 +152,8 @@ $PackInfo = [ordered]@{
     fast     = @{ GB = 6.7;  Text = "Fast chat      Qwen3.5 9B Uncensored (Ollama) - fits fully on an 8-12 GB GPU" }
     vision   = @{ GB = 8.0;  Text = "Vision         Gemma 4 12B (Ollama) - pictures, the webcam, tools" }
     main     = @{ GB = 22.1; Text = "Main           Qwen3.6 35B Heretic (llama.cpp) - best quality; needs 32 GB RAM" }
-    images   = @{ GB = 20.7; Text = "Images         Z-Image-Turbo (ComfyUI) - text to image, ~40 s per picture" }
-    video    = @{ GB = 52.1; Text = "Video          LTX-2.3 + Wan 2.2 (ComfyUI) - text/image to video with sound" }
+    images   = @{ GB = 32.3; Text = "Images         Qwen-Image-2.1 + Z-Image-Turbo (ComfyUI) - text to image and image editing" }
+    video    = @{ GB = 60.3; Text = "Video          LTX-2.5 + Wan 2.2 (ComfyUI) - text/image to video with sound" }
     computer = @{ GB = 6.9;  Text = "Computer use   UI-TARS 1.5 7B (llama.cpp) - drives the mouse and keyboard" }
 }
 Step 3 "Choosing models"
@@ -276,6 +276,11 @@ $comfy = Join-Path $Root "apps\ComfyUI"
 if ($desk -and -not $NoComfyDesktop -and -not (Test-Path "$comfy\main.py")) {
     Skip "using your Comfy Desktop install ($($desk.Name))"
     $nodes = "$($desk.FullName)\ComfyUI\custom_nodes"; $comfyPy = "$($desk.FullName)\ComfyUI\.venv\Scripts\python.exe"
+    # Qwen-Image-2.1 and LTX-2.5 need ComfyUI 0.37 or newer.
+    $ver = (Select-String -Path "$($desk.FullName)\ComfyUI\comfyui_version.py" -Pattern '(\d+)\.(\d+)\.\d+' -ErrorAction SilentlyContinue).Matches
+    if ($ver -and [version]$ver[0].Value -lt [version]"0.37.0") {
+        Warn "Comfy Desktop has ComfyUI $($ver[0].Value); update it in Comfy Desktop for Qwen-Image-2.1 and LTX-2.5"
+    }
 } else {
     if (-not (Test-Path "$comfy\main.py")) {
         git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git $comfy -q
@@ -293,9 +298,17 @@ if ($desk -and -not $NoComfyDesktop -and -not (Test-Path "$comfy\main.py")) {
     $nodes = "$comfy\custom_nodes"; $comfyPy = "$comfyEnv\Scripts\python.exe"
 }
 # Custom nodes the workflows use: GGUF model loaders and KJNodes (VAELoaderKJ).
-foreach ($n in @(@{ Name = "ComfyUI-GGUF"; Url = "https://github.com/city96/ComfyUI-GGUF.git" },
+# leejet's ComfyUI-GGUF is city96's plus Qwen-Image-2.1 and the Qwen3-VL text encoder's mmproj.
+foreach ($n in @(@{ Name = "ComfyUI-GGUF"; Url = "https://github.com/leejet/ComfyUI-GGUF.git" },
                  @{ Name = "ComfyUI-KJNodes"; Url = "https://github.com/kijai/ComfyUI-KJNodes.git" })) {
     $dir = Join-Path $nodes $n.Name
+    if ((Test-Path "$dir\.git") -and ((git -C $dir remote get-url origin) -match "city96")) {
+        git -C $dir remote set-url origin $n.Url
+        git -C $dir pull -q --ff-only
+        if ($LASTEXITCODE) { Warn "couldn't switch $($n.Name) to leejet's version, which Qwen-Image-2.1 needs" }
+        else { Ok "$($n.Name) switched to leejet's version (adds Qwen-Image-2.1)" }
+        continue
+    }
     if (Test-Path $dir) { Skip "$($n.Name) already there"; continue }
     git clone --depth 1 $n.Url $dir -q
     if (Test-Path "$dir\requirements.txt") {
@@ -336,6 +349,11 @@ if ($Packs -contains "computer") {
     Say "    For the computer-use app itself, install UI-TARS Desktop into apps\ui-tars-desktop: https://github.com/bytedance/UI-TARS-desktop/releases" DarkGray
 }
 if ($Packs -contains "images") {
+    # Qwen-Image-2.1: Q4_K_M DiT (uncensored build), Qwen3-VL-8B text encoder (GGUF plus its vision mmproj) and VAE.
+    Download (HF "abenzerps/Qwen-Image-2.1-Uncensored-GGUF" "qwen-image-2.1-UC-Q4_K_M.gguf") "$comfyModels\unet\qwen-image-2.1-UC-Q4_K_M.gguf"
+    Download (HF "unsloth/Qwen3-VL-8B-Instruct-GGUF" "Qwen3-VL-8B-Instruct-UD-Q4_K_XL.gguf") "$comfyModels\text_encoders\Qwen3-VL-8B-Instruct-UD-Q4_K_XL.gguf"
+    Download (HF "unsloth/Qwen3-VL-8B-Instruct-GGUF" "mmproj-F16.gguf") "$comfyModels\text_encoders\Qwen3-VL-8B-Instruct-mmproj-F16.gguf"
+    Download (HF "Comfy-Org/Qwen-Image-2.1" "vae/qwen_image_2.1_vae_bf16.safetensors") "$comfyModels\vae\qwen_image_2.1_vae_bf16.safetensors"
     Download (HF "Comfy-Org/z_image_turbo" "split_files/diffusion_models/z_image_turbo_bf16.safetensors") "$comfyModels\diffusion_models\z_image_turbo_bf16.safetensors"
     Download (HF "Comfy-Org/z_image_turbo" "split_files/text_encoders/qwen_3_4b.safetensors") "$comfyModels\text_encoders\qwen_3_4b.safetensors"
     Download (HF "Comfy-Org/z_image_turbo" "split_files/vae/ae.safetensors") "$comfyModels\vae\ae.safetensors"
@@ -346,11 +364,13 @@ if ($Packs -contains "video") {
         @("jayn7/WAN2.2-I2V_A14B-DISTILL-LIGHTX2V-4STEP-GGUF", "low_noise_260412/wan2.2_i2v_A14b_low_noise_lightx2v_4step_720p_260412-Q4_K_M.gguf", "unet"),
         @("Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", "text_encoders"),
         @("Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/vae/wan_2.1_vae.safetensors", "vae"),
-        @("unsloth/LTX-2.3-GGUF", "distilled-1.1/ltx-2.3-22b-distilled-1.1-Q4_K_M.gguf", "unet"),
-        @("unsloth/LTX-2.3-GGUF", "text_encoders/ltx-2.3-22b-distilled_embeddings_connectors.safetensors", "text_encoders"),
-        @("unsloth/LTX-2.3-GGUF", "vae/ltx-2.3-22b-distilled_video_vae.safetensors", "vae"),
-        @("unsloth/LTX-2.3-GGUF", "vae/ltx-2.3-22b-distilled_audio_vae.safetensors", "vae"),
-        @("unsloth/gemma-3-12b-it-qat-GGUF", "gemma-3-12b-it-qat-UD-Q4_K_XL.gguf", "text_encoders")
+        # LTX-2.5 distilled: the Q4_K_M DiT, then the Gemma 4 12B text encoder, VAEs and x2 upscaler from
+        # comfyicu's ungated copy of Lightricks/LTX-2.5 (the original needs a Hugging Face login).
+        @("Abiray/LTX-2.5-Distilled-GGUF", "LTX-2.5-Distilled-Q4_K_M.gguf", "unet"),
+        @("comfyicu/LTX-2.5", "text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors", "text_encoders"),
+        @("comfyicu/LTX-2.5", "vae/ltx-2.5-video-vae-bf16.safetensors", "vae"),
+        @("comfyicu/LTX-2.5", "vae/ltx-2.5-audio-vae-bf16.safetensors", "vae"),
+        @("comfyicu/LTX-2.5", "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", "latent_upscale_models")
     )
     foreach ($f in $v) { Download (HF $f[0] $f[1]) (Join-Path $comfyModels "$($f[2])\$(Split-Path $f[1] -Leaf)") }
 }
