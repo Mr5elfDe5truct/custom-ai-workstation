@@ -114,8 +114,9 @@ This repo holds the glue: launch scripts, configs, ComfyUI workflows, and the cu
 adds everything else (see [PLAN.md](PLAN.md) for the full build log and every source).
 
 **1. Install.** You need Windows 10/11 (64-bit), an NVIDIA GPU with a current driver, and
-[winget](https://aka.ms/getwinget) (built into Windows 11). Download [`setup.cmd`](setup.cmd) and
-[`install.ps1`](install.ps1) into one folder and double-click **setup.cmd**, or from PowerShell:
+about 40 GB free. Download **Workstation-Setup.zip** from
+[Releases](https://github.com/Mr5elfDe5truct/custom-ai-workstation/releases/latest), unzip it and double-click
+**setup.cmd**. Or from PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/Mr5elfDe5truct/custom-ai-workstation/main/install.ps1 -OutFile "$env:TEMP\install.ps1"
@@ -133,7 +134,8 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `video` | Wan 2.2 image-to-video and LTX-2.3 text-to-video (ComfyUI GGUF) | 52 GB |
 | `computer` | UI-TARS 1.5 7B (llama.cpp) | 7 GB |
 
-Along the way it installs git, uv, Node.js, ffmpeg, Ollama and eSpeak NG with winget; the newest llama.cpp CUDA build;
+Along the way it installs the Visual C++ runtime, git, uv, Node.js, ffmpeg, Ollama and eSpeak NG with winget (and
+winget itself if Windows doesn't have it); the newest llama.cpp CUDA build;
 the Python envs for Open WebUI, the tool server and Kokoro (from the pinned lists in `requirements\`); ComfyUI with the
 GGUF and KJNodes nodes (or reuses Comfy Desktop if you have it); the Desktop and Start Menu shortcuts; and
 [Prestige](https://github.com/Mr5elfDe5truct/prestige). Then it starts everything once to check it works. Downloads
@@ -215,7 +217,7 @@ requirements/*.txt           pinned Python packages for the installer
 tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot, video jobs
 tools/mcpo-config.json       MCP servers exposed to Open WebUI through mcpo
 workflows/*.api.json         ComfyUI API workflows (Z-Image-Turbo, LTX-2.3, Wan 2.2)
-scripts/                     video model downloader, ComfyUI workflow runner
+scripts/                     video model downloader, ComfyUI workflow runner, release packager
 theme/custom.css · loader.js  Open WebUI themes and the theme switcher
 docs/assets/                 README art and samples
 PLAN.md                      design notes, component choices and sources
