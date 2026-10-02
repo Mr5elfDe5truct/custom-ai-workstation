@@ -152,7 +152,7 @@ $PackInfo = [ordered]@{
     fast     = @{ GB = 6.7;  Text = "Fast chat      Qwen3.5 9B Uncensored (Ollama) - fits fully on an 8-12 GB GPU" }
     vision   = @{ GB = 8.0;  Text = "Vision         Gemma 4 12B (Ollama) - pictures, the webcam, tools" }
     main     = @{ GB = 22.1; Text = "Main           Qwen3.6 35B Heretic (llama.cpp) - best quality; needs 32 GB RAM" }
-    images   = @{ GB = 32.3; Text = "Images         Qwen-Image-2.1 + Z-Image-Turbo (ComfyUI) - text to image and image editing" }
+    images   = @{ GB = 36.5; Text = "Images         Qwen-Image-2.1 (+ 4-step turbo) and Z-Image-Turbo (ComfyUI) - text to image and editing" }
     video    = @{ GB = 60.3; Text = "Video          LTX-2.5 + Wan 2.2 (ComfyUI) - text/image to video with sound" }
     computer = @{ GB = 6.9;  Text = "Computer use   UI-TARS 1.5 7B (llama.cpp) - drives the mouse and keyboard" }
 }
@@ -351,6 +351,7 @@ if ($Packs -contains "computer") {
 if ($Packs -contains "images") {
     # Qwen-Image-2.1: Q4_K_M DiT (uncensored build), Qwen3-VL-8B text encoder (GGUF plus its vision mmproj) and VAE.
     Download (HF "abenzerps/Qwen-Image-2.1-Uncensored-GGUF" "qwen-image-2.1-UC-Q4_K_M.gguf") "$comfyModels\unet\qwen-image-2.1-UC-Q4_K_M.gguf"
+    Download (HF "Abiray/Qwen-Image-2.1-viggle-4-steps-turbo-GGUF" "qwen_image_2.1_turbo_Q4_K_M.gguf") "$comfyModels\unet\qwen_image_2.1_turbo_Q4_K_M.gguf"
     Download (HF "unsloth/Qwen3-VL-8B-Instruct-GGUF" "Qwen3-VL-8B-Instruct-UD-Q4_K_XL.gguf") "$comfyModels\text_encoders\Qwen3-VL-8B-Instruct-UD-Q4_K_XL.gguf"
     Download (HF "unsloth/Qwen3-VL-8B-Instruct-GGUF" "mmproj-F16.gguf") "$comfyModels\text_encoders\Qwen3-VL-8B-Instruct-mmproj-F16.gguf"
     Download (HF "Comfy-Org/Qwen-Image-2.1" "vae/qwen_image_2.1_vae_bf16.safetensors") "$comfyModels\vae\qwen_image_2.1_vae_bf16.safetensors"

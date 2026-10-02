@@ -192,14 +192,14 @@ def _wait(job_id: str, timeout: int = 600) -> str:
 
 @mcp.tool()
 def make_image(prompt: str, fast: bool = False, width: int = 1024, height: int = 1024) -> str:
-    """Make a picture with Qwen-Image-2.1 (best quality, handles text, signs and posters; ~1 min).
-    fast=True uses Z-Image-Turbo instead (~40 s). Waits for the render and returns the saved file path."""
-    name, wf = ("z-image-turbo.api.json", None) if fast else _pick("qwen-image-21.api.json", "z-image-turbo.api.json")
+    """Make a picture with Qwen-Image-2.1 (good with text, signs and posters; ~1.5 min).
+    fast=True uses its 4-step turbo (~25 s). Waits for the render and returns the saved file path."""
+    first = "qwen-image-21-turbo.api.json" if fast else "qwen-image-21.api.json"
+    name, wf = _pick(first, "z-image-turbo.api.json")  # Z-Image-Turbo when Qwen isn't installed
     if name.startswith("qwen"):
         wf["4"]["inputs"]["prompt"] = prompt
         size = wf["5"]["inputs"]
     else:
-        wf = wf or _pick(name)[1]
         wf["4"]["inputs"]["text"] = prompt
         size = wf["6"]["inputs"]
     size["width"], size["height"] = max(256, width // 16 * 16), max(256, height // 16 * 16)
