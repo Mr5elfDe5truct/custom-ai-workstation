@@ -168,17 +168,35 @@ def _upload(image_path: str) -> str:
     return up.json()["name"]
 
 
+def _free_gpu():
+    # ComfyUI needs the 12 GB card to itself; sharing it with a chat model makes renders ~3x slower.
+    # Unload Ollama's and llama.cpp's models (the chat model reloads for its next reply).
+    try:
+        for m in httpx.get("http://127.0.0.1:11434/api/ps", timeout=10).json().get("models", []):
+            httpx.post("http://127.0.0.1:11434/api/generate", json={"model": m["name"], "keep_alive": 0}, timeout=30)
+    except httpx.HTTPError:
+        pass
+    try:
+        for m in httpx.get("http://127.0.0.1:8081/models", timeout=10).json().get("data", []):
+            if m.get("status", {}).get("value") in ("loaded", "loading"):
+                httpx.post("http://127.0.0.1:8081/models/unload", json={"model": m["id"]}, timeout=30)
+    except httpx.HTTPError:
+        pass
+
+
 def _queue(wf: dict) -> str:
     for node in wf.values():  # new seed each time
         for key in ("seed", "noise_seed"):
             if key in node["inputs"]:
                 node["inputs"][key] = int(dt.datetime.now().timestamp())
+    _free_gpu()
     r = httpx.post(f"{COMFY}/prompt", json={"prompt": wf}, timeout=30)
     r.raise_for_status()
     return r.json()["prompt_id"]
 
 
-def _wait(job_id: str, timeout: int = 600) -> str:
+def _wait(job_id: str, timeout: int = 240) -> str:
+    # Open WebUI gives up on a tool call after 5 minutes, so hand back the job id before that.
     import time
 
     end = time.time() + timeout
@@ -186,6 +204,9 @@ def _wait(job_id: str, timeout: int = 600) -> str:
         status = job_status(job_id)
         if not status.startswith(("Rendering", "Waiting")):
             return status
+        # Open WebUI reloads the chat model for background tasks (chat titles) while the tool waits,
+        # so keep the card clear until the render is done; the model reloads for its reply.
+        _free_gpu()
         time.sleep(3)
     return f"Still rendering after {timeout} s; check later with job_status (job id {job_id})."
 
