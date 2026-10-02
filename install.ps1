@@ -67,8 +67,12 @@ function Ensure-Winget {
         Download $a.browser_download_url (Join-Path $tmp $n)
     }
     Expand-Archive (Join-Path $tmp "DesktopAppInstaller_Dependencies.zip") (Join-Path $tmp "deps") -Force
-    $deps = @(Get-ChildItem (Join-Path $tmp "deps") -Recurse -Include *.appx, *.msix | Where-Object { $_.FullName -match "\x64\\" })
-    foreach ($d in $deps) { try { Add-AppxPackage -Path $d.FullName -ErrorAction Stop } catch { } }   # newer versions may already be there
+    $deps = @(Get-ChildItem (Join-Path $tmp "deps") -Recurse -Include *.appx, *.msix | Where-Object { $_.Directory.Name -eq "x64" })
+    if (-not $deps) { throw "The winget dependencies download had no x64 packages. Install 'App Installer' from the Microsoft Store, then run this again." }
+    foreach ($d in $deps) {
+        try { Add-AppxPackage -Path $d.FullName -ErrorAction Stop; Ok $d.BaseName }
+        catch { Warn "$($d.BaseName): $($_.Exception.Message.Split([char]10)[0])" }   # usually a newer version is already there
+    }
     Add-AppxPackage -Path (Join-Path $tmp "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle")
     $env:Path += ";$env:LOCALAPPDATA\Microsoft\WindowsApps"
     if (-not (Has winget.exe)) { throw "winget still isn't available. Install 'App Installer' from the Microsoft Store, then run this again." }
