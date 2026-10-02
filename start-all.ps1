@@ -38,10 +38,13 @@ if (Test-Path "$Root\apps\ComfyUI\main.py") {
     if ($desk) { $ComfyDir = "$($desk.FullName)\ComfyUI"; $ComfyPython = "$ComfyDir\.venv\Scripts\python.exe" }
 }
 # Model folders ComfyUI should see: the workstation's models\comfy, plus Comfy Desktop's shared models if present.
-$yaml = @"
-# Written by start-all.ps1 on every start.
-workstation:
-  base_path: $Root\models\comfy
+# models\comfy-fast is optional: when models\comfy links to a slower disk, keep the models you use most there.
+$yaml = "# Written by start-all.ps1 on every start.`n"
+foreach ($dir in "comfy", "comfy-fast") {
+    if ($dir -ne "comfy" -and -not (Test-Path "$Root\models\$dir")) { continue }
+    $yaml += @"
+workstation_$($dir.Replace('-', '_')):
+  base_path: $Root\models\$dir
   checkpoints: checkpoints/
   diffusion_models: |
     diffusion_models/
@@ -53,8 +56,10 @@ workstation:
   loras: loras/
   latent_upscale_models: latent_upscale_models/
   upscale_models: upscale_models/
+
 "@
-$shared = "$env:LOCALAPPDATA\Comfy-Desktop\ComfyUI-Shared\models"
+}
+$shared ="$env:LOCALAPPDATA\Comfy-Desktop\ComfyUI-Shared\models"
 if (Test-Path $shared) {
     $yaml += @"
 
