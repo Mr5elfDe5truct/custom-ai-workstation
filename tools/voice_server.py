@@ -197,6 +197,8 @@ def _speak(text: str, voice: str, steps: int) -> tuple[np.ndarray, int]:
             wav_path.with_suffix(".txt").write_text(SAMPLE, encoding="utf-8")
             transcript = SAMPLE
         kw = {}
+        if wav_path.exists() and sf.info(str(wav_path)).duration < 1:
+            raise HTTPException(400, f"the voice clip for {voice} is empty; add it again with Clone a voice")
         if wav_path.exists():
             kw["reference_wav_path"] = str(wav_path)
             if transcript:  # "ultimate cloning": the clip plus what it says keeps the voice closest
@@ -252,13 +254,23 @@ async def add_voice(name: str = Form(...), file: UploadFile = File(...), transcr
     except Exception:
         if not shutil.which("ffmpeg"):
             raise HTTPException(400, "use a WAV or FLAC file (ffmpeg isn't installed for other formats)")
-        out = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", "pipe:0", "-ac", "1", "-ar", "16000", "-f", "wav",
-                              "pipe:1"], input=raw, capture_output=True)
+        # From a temp file (an .m4a keeps its index at the end, which ffmpeg can't reach on a pipe) to raw samples
+        # (a WAV written to a pipe has no length in its header and reads back as zero samples).
+        sr = 16000
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename or "clip").suffix or ".bin") as f:
+            f.write(raw)
+        try:
+            out = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", f.name, "-ac", "1", "-ar", str(sr), "-f", "f32le",
+                                  "pipe:1"], capture_output=True)
+        finally:
+            os.unlink(f.name)
         if out.returncode:
             raise HTTPException(400, "couldn't read that audio file")
-        audio, sr = sf.read(io.BytesIO(out.stdout))
+        audio = np.frombuffer(out.stdout, dtype=np.float32)
     if audio.ndim > 1:
         audio = audio.mean(axis=1)
+    if len(audio) < sr * 3:
+        raise HTTPException(400, f"that clip has {len(audio) / sr:.1f} s of audio; use 5-30 s of one person speaking")
     audio = audio[: sr * 30]  # a 5-30 s clip is plenty
     sf.write(VOICES / f"{name}.wav", audio, sr, subtype="PCM_16")
     txt = VOICES / f"{name}.txt"
