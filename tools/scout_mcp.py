@@ -170,7 +170,11 @@ def _upload(image_path: str) -> str:
 
 def _free_gpu():
     # ComfyUI needs the 12 GB card to itself; sharing it with a chat model makes renders ~3x slower.
-    # Unload Ollama's and llama.cpp's models (the chat model reloads for its next reply).
+    # Unload Ollama's and llama.cpp's models (the chat model reloads for its next reply), and the voice server's.
+    try:
+        httpx.post("http://127.0.0.1:8890/v1/audio/unload", json={}, timeout=30)
+    except httpx.HTTPError:
+        pass
     try:
         for m in httpx.get("http://127.0.0.1:11434/api/ps", timeout=10).json().get("models", []):
             httpx.post("http://127.0.0.1:11434/api/generate", json={"model": m["name"], "keep_alive": 0}, timeout=30)

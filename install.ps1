@@ -152,6 +152,8 @@ $PackInfo = [ordered]@{
     fast     = @{ GB = 6.7;  Text = "Fast chat      Qwen3.5 9B Uncensored (Ollama) - fits fully on an 8-12 GB GPU" }
     vision   = @{ GB = 8.0;  Text = "Vision         Gemma 4 12B (Ollama) - pictures, the webcam, tools" }
     main     = @{ GB = 22.1; Text = "Main           Qwen3.6 35B Heretic (llama.cpp) - best quality; needs 32 GB RAM" }
+    deep     = @{ GB = 10.9; Text = "Deep           Qwen3.8 27B Uncensored (llama.cpp) - strongest reasoning, ~30 tok/s on 12 GB" }
+    voice    = @{ GB = 12.0; Text = "Voice          Whisper turbo speech-to-text + VoxCPM2 voices and cloning (GPU, 8 GB+)" }
     images   = @{ GB = 36.5; Text = "Images         Qwen-Image-2.1 (+ 4-step turbo) and Z-Image-Turbo (ComfyUI) - text to image and editing" }
     video    = @{ GB = 60.3; Text = "Video          LTX-2.5 + Wan 2.2 (ComfyUI) - text/image to video with sound" }
     computer = @{ GB = 6.9;  Text = "Computer use   UI-TARS 1.5 7B (llama.cpp) - drives the mouse and keyboard" }
@@ -160,6 +162,7 @@ Step 3 "Choosing models"
 if (-not $Packs) {
     $defaults = @("fast", "images")
     if ($ramGB -ge 32) { $defaults += "main" }
+    if ($vramGB -ge 8) { $defaults += "voice" }
     if ($Yes) { $Packs = $defaults } else {
         $i = 1
         foreach ($k in $PackInfo.Keys) {
@@ -264,6 +267,23 @@ $voiceModel = "$kokoro\api\src\models\v1_0"
 Download (HF "hexgrad/Kokoro-82M" "kokoro-v1_0.pth") "$voiceModel\kokoro-v1_0.pth"
 Download (HF "hexgrad/Kokoro-82M" "config.json") "$voiceModel\config.json"
 
+# Voice server (voice pack): Whisper large-v3-turbo and VoxCPM2 on the GPU. PyTorch for CUDA 12.8 first (it runs on
+# CUDA 12 and 13 drivers, and CTranslate2's Whisper loads the cuBLAS 12 it ships), then the pinned packages.
+if ($Packs -contains "voice") {
+    $voiceEnv = Join-Path $Root "envs\voice"
+    if (Test-Path "$voiceEnv\Scripts\python.exe") { Skip "voice already set up" } else {
+        & uv venv $voiceEnv --python 3.12 -q
+        Say "    installing PyTorch for CUDA (cu128), about 3 GB…"
+        & uv pip install -p $voiceEnv torch torchaudio --index-url "https://download.pytorch.org/whl/cu128" -q
+        Push-Location $Root
+        & uv pip install -p $voiceEnv -r "requirements\voice.txt" -q
+        $code = $LASTEXITCODE
+        Pop-Location
+        if ($code) { throw "Installing the voice environment failed" }
+        Ok "voice"
+    }
+}
+
 # ---------- 8. ComfyUI ----------
 Step 8 "ComfyUI (images and video)"
 # With several Comfy Desktop installs, use the one that has the GGUF nodes, then the most recently used (same as start-all.ps1).
@@ -343,6 +363,18 @@ if ($Packs -contains "main") {
     Download (HF "Youssofal/Qwen3.6-35B-A3B-Abliterated-Heretic-GGUF" "Qwen3.6-35B-A3B-Abliterated-Heretic-Q4_K_M/Qwen3.6-35B-A3B-Abliterated-Heretic-Q4_K_M.gguf") "$gguf\qwen3.6-35b-a3b-heretic-Q4_K_M.gguf"
     Download (HF "Youssofal/Qwen3.6-35B-A3B-Abliterated-Heretic-GGUF" "mmproj-Qwen3.6-35B-A3B-Abliterated-Heretic.gguf") "$gguf\qwen3.6-35b-a3b-heretic-mmproj.gguf"
 }
+if ($Packs -contains "deep") {
+    # Q2_K_P is the largest quant that fits a 12 GB card whole (bigger ones run at 5-8 tok/s with layers in RAM).
+    $q38 = "HauhauCS/Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-MTP-GGUF"
+    Download (HF $q38 "Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q2_K_P.gguf") "$gguf\Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-Q2_K_P.gguf"
+    Download (HF $q38 "mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf") "$gguf\mmproj-Qwen3.8-27B-Uncensored-HauhauCS-Aggressive-BF16.gguf"
+}
+if ($Packs -contains "voice") {
+    # VoxCPM2 text-to-speech (Whisper turbo downloads itself into models\whisper on first use).
+    foreach ($f in "config.json", "special_tokens_map.json", "tokenization_voxcpm2.py", "tokenizer.json", "tokenizer_config.json", "audiovae.pth", "model.safetensors") {
+        Download (HF "openbmb/VoxCPM2" $f) (Join-Path $Root "models\tts\VoxCPM2\$f")
+    }
+}
 if ($Packs -contains "computer") {
     Download (HF "Mungert/UI-TARS-1.5-7B-GGUF" "UI-TARS-1.5-7B-q5_k_m.gguf") "$gguf\UI-TARS-1.5-7B-q5_k_m.gguf"
     Download (HF "Mungert/UI-TARS-1.5-7B-GGUF" "UI-TARS-1.5-7B-f16.mmproj") "$gguf\UI-TARS-1.5-7B-f16.mmproj"
@@ -401,6 +433,7 @@ if (-not $NoTest) {
     $up = { param($port) [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) }
     & (Join-Path $Root "start-all.ps1") -NoBrowser | Out-Null
     $checks = [ordered]@{ "Ollama" = 11434; "llama.cpp" = 8081; "Open WebUI" = 8080; "ComfyUI" = 8188; "Kokoro voice" = 8880; "Tool server" = 8200 }
+    if (Test-Path (Join-Path $Root "envs\voice\Scripts\python.exe")) { $checks["Voice server"] = 8890 }
     $deadline = (Get-Date).AddMinutes(4)
     do { Start-Sleep 3; $missing = @($checks.Keys | Where-Object { -not (& $up $checks[$_]) }) } while ($missing -and (Get-Date) -lt $deadline)
     foreach ($k in $checks.Keys) { if (& $up $checks[$k]) { Ok "$k (:$($checks[$k]))" } else { Warn "$k didn't start; see $Root\logs" } }
