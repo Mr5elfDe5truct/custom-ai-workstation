@@ -184,12 +184,13 @@ def _free_gpu():
         pass
 
 
-def _queue(wf: dict) -> str:
+def _queue(wf: dict, free_gpu: bool = True) -> str:
     for node in wf.values():  # new seed each time
         for key in ("seed", "noise_seed"):
             if key in node["inputs"]:
                 node["inputs"][key] = int(dt.datetime.now().timestamp())
-    _free_gpu()
+    if free_gpu:
+        _free_gpu()
     r = httpx.post(f"{COMFY}/prompt", json={"prompt": wf}, timeout=30)
     r.raise_for_status()
     return r.json()["prompt_id"]
@@ -245,7 +246,10 @@ def edit_image(prompt: str, image_path: str, reference_path: str = "") -> str:
 @mcp.tool()
 def make_video(prompt: str, image_path: str = "") -> str:
     """Queue a video in ComfyUI. With image_path: animates that image (Wan 2.2, ~10 min, 5 s, no sound).
-    Without: text-to-video with sound (LTX-2.5, ~6 min, 4 s). Returns a job id for job_status."""
+    Without: text-to-video with sound (LTX-2.5, ~4 min, 4 s). Chat models are unloaded while it renders,
+    so tell the user to wait for it before chatting more. Returns a job id for job_status."""
+    import threading
+
     if image_path:
         wf = _pick("wan22-i2v-4step.api.json")[1]
         wf["6"]["inputs"]["text"] = prompt
@@ -254,7 +258,22 @@ def make_video(prompt: str, image_path: str = "") -> str:
         # Falls back to LTX-2.3 on installs that haven't downloaded LTX-2.5.
         wf = _pick("ltx25-t2v-distilled.api.json", "ltx23-t2v-distilled.api.json")[1]
         wf["5"]["inputs"]["text"] = prompt
-    return f"Queued video job {_queue(wf)}. It will be saved in {OUTPUT / 'video'}."
+    job_id = _queue(wf, free_gpu=False)  # the chat model is still needed for its reply
+    threading.Thread(target=_guard_gpu, args=(job_id,), daemon=True).start()
+    return f"Queued video job {job_id}. It will be saved in {OUTPUT / 'video'}."
+
+
+def _guard_gpu(job_id: str):
+    # A chat model reloaded next to a video render fills the card and RAM, and the render crawls
+    # (20+ min instead of ~4). Once the chat has replied (it's still loaded, ~30 s), keep chat models
+    # unloaded until the render is done.
+    import time
+
+    time.sleep(60)
+    end = time.time() + 30 * 60
+    while time.time() < end and job_status(job_id).startswith(("Rendering", "Waiting")):
+        _free_gpu()
+        time.sleep(5)
 
 
 @mcp.tool()
