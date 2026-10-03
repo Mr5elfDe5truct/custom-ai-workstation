@@ -153,7 +153,7 @@ $PackInfo = [ordered]@{
     vision   = @{ GB = 8.0;  Text = "Vision         Gemma 4 12B (Ollama) - pictures, the webcam, tools" }
     main     = @{ GB = 22.1; Text = "Main           Qwen3.6 35B Heretic (llama.cpp) - best quality; needs 32 GB RAM" }
     deep     = @{ GB = 10.9; Text = "Deep           Qwen3.8 27B Uncensored (llama.cpp) - strongest reasoning, ~30 tok/s on 12 GB" }
-    voice    = @{ GB = 12.0; Text = "Voice          Whisper turbo speech-to-text + VoxCPM2 voices and cloning (GPU, 8 GB+)" }
+    voice    = @{ GB = 18.1; Text = "Voice          Whisper turbo + VoxCPM2 voices and cloning + Qwen3.5 2B/4B for Live calls (GPU, 8 GB+)" }
     images   = @{ GB = 36.5; Text = "Images         Qwen-Image-2.1 (+ 4-step turbo) and Z-Image-Turbo (ComfyUI) - text to image and editing" }
     video    = @{ GB = 60.3; Text = "Video          LTX-2.5 + Wan 2.2 (ComfyUI) - text/image to video with sound" }
     computer = @{ GB = 6.9;  Text = "Computer use   UI-TARS 1.5 7B (llama.cpp) - drives the mouse and keyboard" }
@@ -344,6 +344,8 @@ $gguf = Join-Path $Root "models\gguf"
 $comfyModels = Join-Path $Root "models\comfy"
 $ollamaPacks = @{ fast = "hf.co/LEONW24/Qwen3.5-9B-Uncensored:Q4_K_M"; vision = "gemma4:12b" }
 $pulls = @($Packs | Where-Object { $ollamaPacks.ContainsKey($_) } | ForEach-Object { $ollamaPacks[$_] })
+# Prestige's Live calls: small vision models that fit on the GPU beside Whisper (and the 2B beside VoxCPM2).
+if ($Packs -contains "voice") { $pulls += @("qwen3.5:2b", "qwen3.5:4b") }
 if ($pulls) {
     # Pull into the workstation's own model store, using a temporary Ollama server pointed at it.
     $env:OLLAMA_MODELS = Join-Path $Root "models\ollama"
