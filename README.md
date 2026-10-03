@@ -67,8 +67,9 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | 🧰 | **Tools** | web search, web fetch, files, PowerShell (guarded), Playwright browser control |
 | 🔭 | **Research scout** | Reddit, Hugging Face trending GGUFs and GitHub search, plus a Markdown scout report |
 | 🖱️ | **Computer use** | UI-TARS Desktop driven by a local UI-TARS-1.5-7B |
-| 🖼️ | **Images** | Z-Image-Turbo through ComfyUI, from the image button or by asking |
-| 🎬 | **Video** | LTX-2.3 text-to-video with audio, Wan 2.2 image-to-video, as background jobs |
+| 🖼️ | **Images** | Qwen-Image-2.1 (good with text, signs and posters), its 4-step turbo, or Z-Image-Turbo through ComfyUI, from the image button or by asking |
+| ✏️ | **Image editing** | Qwen-Image-2.1 by instruction ("make it night", "swap the car for a horse"), with an optional reference image or mask |
+| 🎬 | **Video** | LTX-2.5 text-to-video with audio, Wan 2.2 image-to-video, as background jobs |
 | 🗂️ | **Shared long-term memory** | every model reads and writes the same memory; chats are saved |
 
 ## 🎩 Prestige desktop app
@@ -89,7 +90,7 @@ stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe
 | 8081 | llama.cpp router | Qwen3.6 35B and UI-TARS, one at a time; unloads after 3 min idle (`bin/llama-models.ini`) |
 | 8188 | ComfyUI (headless) | its own install, or Comfy Desktop's; frees the GPU after each job |
 | 8880 | Kokoro | text-to-speech on CPU |
-| 8200 | mcpo tool server | research, webcam, fetch, video jobs, files, shell, browser (`tools/mcpo-config.json`) |
+| 8200 | mcpo tool server | research, webcam, fetch, images, image edits, video jobs, files, shell, browser (`tools/mcpo-config.json`) |
 
 The 12 GB GPU holds one big model at a time. Everything unloads when idle, so chat, images and video take turns.
 
@@ -103,8 +104,11 @@ The 12 GB GPU holds one big model at a time. Everything unloads when idle, so ch
 | Fast, fully on GPU, uncensored | Qwen3.5-9B Uncensored Q4_K_M | Ollama | 6.7 GB | fast |
 | Vision / webcam | Gemma 4 (12B and e4b) | Ollama | 7–10 GB | good |
 | Computer use | UI-TARS-1.5-7B Q5_K_M | llama.cpp | ~5.5 GB | on demand |
-| Images | Z-Image-Turbo | ComfyUI | — | ~30–45 s at 1024² |
-| Text → video + audio | LTX-2.3 22B distilled Q4_K_M | ComfyUI + GGUF | ~20 GB | ~6 min for 4 s |
+| Images | Qwen-Image-2.1 Q4_K_M (uncensored), 20 steps, Qwen3-VL-8B text encoder | ComfyUI + GGUF | ~11.6 GB | ~80 s at 1024² (~110 s cold); peak 6–8 GB VRAM |
+| Images, fast | Qwen-Image-2.1 Viggle 4-step turbo Q4_K_M | ComfyUI + GGUF | +4.2 GB | ~25 s at 1024² |
+| Image editing | Qwen-Image-2.1 (same files) | ComfyUI + GGUF | — | ~2 min at 1024²; peak 8.3 GB VRAM |
+| Images (alternative) | Z-Image-Turbo | ComfyUI | 21 GB | ~35–40 s at 1024² |
+| Text → video + audio | LTX-2.5 22B distilled Q4_K_M, two-stage with the x2 latent upscaler | ComfyUI + GGUF | ~34 GB | ~3.5 min for 4 s at 768×512 from an NVMe drive (~9.5 min from an HDD); peak 11.9 GB VRAM |
 | Image → video | Wan 2.2 I2V A14B LightX2V 4-step Q4_K_M | ComfyUI + GGUF | ~25 GB | ~10 min for 5 s |
 | Speech | faster-whisper `base`, Kokoro 82M | Open WebUI, Kokoro-FastAPI | small | CPU |
 
@@ -130,14 +134,15 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `fast` | Qwen3.5 9B Uncensored (Ollama) | 6.7 GB |
 | `vision` | Gemma 4 12B (Ollama) | 8 GB |
 | `main` | Qwen3.6 35B-A3B Heretic + vision (llama.cpp, needs 32 GB RAM) | 22 GB |
-| `images` | Z-Image-Turbo (ComfyUI) | 21 GB |
-| `video` | Wan 2.2 image-to-video and LTX-2.3 text-to-video (ComfyUI GGUF) | 52 GB |
+| `images` | Qwen-Image-2.1 text-to-image and editing, its 4-step turbo (ComfyUI GGUF), and Z-Image-Turbo | 37 GB |
+| `video` | Wan 2.2 image-to-video and LTX-2.5 text-to-video (ComfyUI GGUF) | 60 GB |
 | `computer` | UI-TARS 1.5 7B (llama.cpp) | 7 GB |
 
 Along the way it installs the Visual C++ runtime, git, uv, Node.js, ffmpeg, Ollama and eSpeak NG with winget (and
 winget itself if Windows doesn't have it); the newest llama.cpp CUDA build;
 the Python envs for Open WebUI, the tool server and Kokoro (from the pinned lists in `requirements\`); ComfyUI with the
-GGUF and KJNodes nodes (or reuses Comfy Desktop if you have it); the Desktop and Start Menu shortcuts; and
+GGUF nodes ([leejet's fork](https://github.com/leejet/ComfyUI-GGUF), which adds Qwen-Image-2.1) and KJNodes (or reuses
+Comfy Desktop if you have it, which needs ComfyUI 0.37 or newer; 0.38 renders Qwen faster); the Desktop and Start Menu shortcuts; and
 [Prestige](https://github.com/Mr5elfDe5truct/prestige). Then it starts everything once to check it works. Downloads
 resume, so you can run it again to add packs or finish an interrupted install. Options:
 
@@ -187,8 +192,9 @@ Three more are built in: **Cyberpunk Neon**, **Glass** (frosted panels over a co
 - **Pick a model** at the top of the chat. Qwen3.6 35B is the best all-rounder; its first message after idling takes ~30–60 s to load.
 - **Talk to it** with the mic and voice-mode buttons. Answers are spoken with Kokoro.
 - **Webcam:** voice mode → camera icon starts a video call (use Gemma 4). Or ask "take a webcam photo and tell me what you see".
-- **Images:** the image button under the message box, or just ask for one.
-- **Video:** "make a video of …" (LTX-2.3) or "animate this image: C:\path\to.png" (Wan 2.2). It returns a job id; ask "is video &lt;id&gt; done?".
+- **Images:** the image button under the message box, or just ask for one (Qwen-Image-2.1; ask for a quick one to get its 4-step turbo).
+- **Edit an image:** "edit C:\path\to.png: make it night". Add a second image as a reference (a face, product, outfit) or a black-and-white mask of the area to change.
+- **Video:** "make a video of …" (LTX-2.5) or "animate this image: C:\path\to.png" (Wan 2.2). It returns a job id; ask "is video &lt;id&gt; done?".
 - **Research:** "what's new on r/LocalLLaMA this week", "find trending GGUF models under 10 GB", or "run a scout report".
 - **Files and commands:** "list what's in my Downloads", "run `nvidia-smi`". The shell blocks disk, format, registry, shutdown and user-account commands, and the model asks before deleting, installing or changing settings.
 - **Browser control:** enable the **browser** tool for a chat, then "open github.com/ggml-org/llama.cpp/releases and tell me the newest tag".
@@ -214,9 +220,9 @@ open-app.ps1 · install-shortcut.ps1                     Open WebUI app window a
 install.ps1 · setup.cmd       installer (setup.cmd runs install.ps1)
 bin/llama-models.ini         llama.cpp router presets (Qwen3.6, UI-TARS)
 requirements/*.txt           pinned Python packages for the installer
-tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot, video jobs
+tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot, images, image edits, video jobs
 tools/mcpo-config.json       MCP servers exposed to Open WebUI through mcpo
-workflows/*.api.json         ComfyUI API workflows (Z-Image-Turbo, LTX-2.3, Wan 2.2)
+workflows/*.api.json         ComfyUI API workflows (Qwen-Image-2.1 and its edit, Z-Image-Turbo, LTX-2.5, LTX-2.3, Wan 2.2)
 scripts/                     video model downloader, ComfyUI workflow runner, release packager
 theme/custom.css · loader.js  Open WebUI themes and the theme switcher
 docs/assets/                 README art and samples

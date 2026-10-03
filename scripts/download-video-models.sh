@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Downloads the Wan 2.2 and LTX-2.3 video models (GGUF) into the workstation's models\comfy folder.
+# Downloads the Wan 2.2 and LTX-2.5 video models (GGUF) into the workstation's models\comfy folder.
 # Resumable: re-run to continue interrupted downloads.
 set -u
 D="$(cd "$(dirname "$0")/.." && pwd)/models/comfy"
 HF=https://huggingface.co
-mkdir -p "$D"/{unet,text_encoders,vae,loras}
+mkdir -p "$D"/{unet,text_encoders,vae,loras,latent_upscale_models}
 
 get() { # repo path dest
   local out="$D/$3/$(basename "$2")"
@@ -22,12 +22,12 @@ get QuantStack/Wan2.2-T2V-A14B-GGUF LowNoise/Wan2.2-T2V-A14B-LowNoise-Q4_K_M.ggu
 get Comfy-Org/Wan_2.1_ComfyUI_repackaged split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors text_encoders
 get Comfy-Org/Wan_2.1_ComfyUI_repackaged split_files/vae/wan_2.1_vae.safetensors vae
 
-# LTX-2.3 distilled (video + audio, 4-8 steps)
-get unsloth/LTX-2.3-GGUF distilled-1.1/ltx-2.3-22b-distilled-1.1-Q4_K_M.gguf unet
-get unsloth/LTX-2.3-GGUF text_encoders/ltx-2.3-22b-distilled_embeddings_connectors.safetensors text_encoders
-get unsloth/LTX-2.3-GGUF vae/ltx-2.3-22b-distilled_video_vae.safetensors vae
-get unsloth/LTX-2.3-GGUF vae/ltx-2.3-22b-distilled_audio_vae.safetensors vae
-get unsloth/gemma-3-12b-it-qat-GGUF gemma-3-12b-it-qat-UD-Q4_K_XL.gguf text_encoders
-get unsloth/gemma-3-12b-it-qat-GGUF mmproj-BF16.gguf text_encoders
+# LTX-2.5 distilled (video + audio, 8 + 3 steps). Text encoder, VAEs and upscaler from comfyicu's ungated
+# copy of Lightricks/LTX-2.5 (the original needs a Hugging Face login).
+get Abiray/LTX-2.5-Distilled-GGUF LTX-2.5-Distilled-Q4_K_M.gguf unet
+get comfyicu/LTX-2.5 text_encoders/gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors text_encoders
+get comfyicu/LTX-2.5 vae/ltx-2.5-video-vae-bf16.safetensors vae
+get comfyicu/LTX-2.5 vae/ltx-2.5-audio-vae-bf16.safetensors vae
+get comfyicu/LTX-2.5 latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors latent_upscale_models
 
 echo "$(date +%T) all done"

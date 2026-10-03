@@ -131,36 +131,154 @@ def webcam_snapshot(camera_index: int = 0) -> str:
 
 COMFY = "http://127.0.0.1:8188"
 WORKFLOWS = ROOT / "workflows"
+OUTPUT = ROOT / "data" / "comfy-output"
+
+
+def _pick(*names: str) -> tuple[str, dict]:
+    """The first of these workflows whose model files ComfyUI has, else the last one (its error names the file)."""
+    import json
+
+    for name in names:
+        wf = json.loads((WORKFLOWS / name).read_text(encoding="utf-8"))
+        if name == names[-1] or _installed(wf):
+            return name, wf
+
+
+def _installed(wf: dict) -> bool:
+    # ComfyUI's object_info lists the files each loader node can see.
+    specs = {}
+    for node in wf.values():
+        for key in ("unet_name", "clip_name", "vae_name"):
+            value = node["inputs"].get(key)
+            if not isinstance(value, str):
+                continue
+            cls = node["class_type"]
+            if cls not in specs:
+                spec = httpx.get(f"{COMFY}/object_info/{cls}", timeout=30).json()[cls]["input"]
+                specs[cls] = {**spec.get("required", {}), **spec.get("optional", {})}
+            if value not in specs[cls][key][0]:
+                return False
+    return True
+
+
+def _upload(image_path: str) -> str:
+    p = Path(image_path)
+    up = httpx.post(f"{COMFY}/upload/image", files={"image": (p.name, p.read_bytes())}, timeout=60)
+    up.raise_for_status()
+    return up.json()["name"]
+
+
+def _free_gpu():
+    # ComfyUI needs the 12 GB card to itself; sharing it with a chat model makes renders ~3x slower.
+    # Unload Ollama's and llama.cpp's models (the chat model reloads for its next reply).
+    try:
+        for m in httpx.get("http://127.0.0.1:11434/api/ps", timeout=10).json().get("models", []):
+            httpx.post("http://127.0.0.1:11434/api/generate", json={"model": m["name"], "keep_alive": 0}, timeout=30)
+    except httpx.HTTPError:
+        pass
+    try:
+        for m in httpx.get("http://127.0.0.1:8081/models", timeout=10).json().get("data", []):
+            if m.get("status", {}).get("value") in ("loaded", "loading"):
+                httpx.post("http://127.0.0.1:8081/models/unload", json={"model": m["id"]}, timeout=30)
+    except httpx.HTTPError:
+        pass
+
+
+def _queue(wf: dict, free_gpu: bool = True) -> str:
+    for node in wf.values():  # new seed each time
+        for key in ("seed", "noise_seed"):
+            if key in node["inputs"]:
+                node["inputs"][key] = int(dt.datetime.now().timestamp())
+    if free_gpu:
+        _free_gpu()
+    r = httpx.post(f"{COMFY}/prompt", json={"prompt": wf}, timeout=30)
+    r.raise_for_status()
+    return r.json()["prompt_id"]
+
+
+def _wait(job_id: str, timeout: int = 240) -> str:
+    # Open WebUI gives up on a tool call after 5 minutes, so hand back the job id before that.
+    import time
+
+    end = time.time() + timeout
+    while time.time() < end:
+        status = job_status(job_id)
+        if not status.startswith(("Rendering", "Waiting")):
+            return status
+        # Open WebUI reloads the chat model for background tasks (chat titles) while the tool waits,
+        # so keep the card clear until the render is done; the model reloads for its reply.
+        _free_gpu()
+        time.sleep(3)
+    return f"Still rendering after {timeout} s; check later with job_status (job id {job_id})."
+
+
+@mcp.tool()
+def make_image(prompt: str, fast: bool = False, width: int = 1024, height: int = 1024) -> str:
+    """Make a picture with Qwen-Image-2.1 (good with text, signs and posters; ~1.5 min).
+    fast=True uses its 4-step turbo (~25 s). Waits for the render and returns the saved file path."""
+    first = "qwen-image-21-turbo.api.json" if fast else "qwen-image-21.api.json"
+    name, wf = _pick(first, "z-image-turbo.api.json")  # Z-Image-Turbo when Qwen isn't installed
+    if name.startswith("qwen"):
+        wf["4"]["inputs"]["prompt"] = prompt
+        size = wf["5"]["inputs"]
+    else:
+        wf["4"]["inputs"]["text"] = prompt
+        size = wf["6"]["inputs"]
+    size["width"], size["height"] = max(256, width // 16 * 16), max(256, height // 16 * 16)
+    return _wait(_queue(wf))
+
+
+@mcp.tool()
+def edit_image(prompt: str, image_path: str, reference_path: str = "") -> str:
+    """Edit a picture by instruction with Qwen-Image-2.1, e.g. "make it night", "replace the red car with a
+    blue bicycle", "remove the person on the left". reference_path: an optional second picture (a face,
+    product or outfit to use, or a black-and-white mask of the area to change). Waits (~1-2 min) and
+    returns the new file path."""
+    wf = _pick("qwen-image-21-edit.api.json")[1]
+    wf["4"]["inputs"]["prompt"] = prompt
+    wf["9"]["inputs"]["image"] = _upload(image_path)
+    if reference_path:
+        wf["10"] = {"class_type": "LoadImage", "inputs": {"image": _upload(reference_path)}}
+        wf["4"]["inputs"]["images.image_2"] = ["10", 0]
+    return _wait(_queue(wf))
 
 
 @mcp.tool()
 def make_video(prompt: str, image_path: str = "") -> str:
     """Queue a video in ComfyUI. With image_path: animates that image (Wan 2.2, ~10 min, 5 s, no sound).
-    Without: text-to-video with sound (LTX-2.3, ~6 min, 4 s). Returns a job id for video_status."""
-    import json
+    Without: text-to-video with sound (LTX-2.5, ~4 min, 4 s). Chat models are unloaded while it renders,
+    so tell the user to wait for it before chatting more. Returns a job id for job_status."""
+    import threading
 
     if image_path:
-        wf = json.loads((WORKFLOWS / "wan22-i2v-4step.api.json").read_text())
+        wf = _pick("wan22-i2v-4step.api.json")[1]
         wf["6"]["inputs"]["text"] = prompt
-        p = Path(image_path)
-        up = httpx.post(f"{COMFY}/upload/image", files={"image": (p.name, p.read_bytes())}, timeout=60)
-        up.raise_for_status()
-        wf["9"]["inputs"]["image"] = up.json()["name"]
+        wf["9"]["inputs"]["image"] = _upload(image_path)
     else:
-        wf = json.loads((WORKFLOWS / "ltx23-t2v-distilled.api.json").read_text())
+        # Falls back to LTX-2.3 on installs that haven't downloaded LTX-2.5.
+        wf = _pick("ltx25-t2v-distilled.api.json", "ltx23-t2v-distilled.api.json")[1]
         wf["5"]["inputs"]["text"] = prompt
-    for node in wf.values():  # new seed each time
-        for key in ("seed", "noise_seed"):
-            if key in node["inputs"]:
-                node["inputs"][key] = int(dt.datetime.now().timestamp())
-    r = httpx.post(f"{COMFY}/prompt", json={"prompt": wf}, timeout=30)
-    r.raise_for_status()
-    return f"Queued video job {r.json()['prompt_id']}. It will be saved in {ROOT / 'data' / 'comfy-output' / 'video'}."
+    job_id = _queue(wf, free_gpu=False)  # the chat model is still needed for its reply
+    threading.Thread(target=_guard_gpu, args=(job_id,), daemon=True).start()
+    return f"Queued video job {job_id}. It will be saved in {OUTPUT / 'video'}."
+
+
+def _guard_gpu(job_id: str):
+    # A chat model reloaded next to a video render fills the card and RAM, and the render crawls
+    # (20+ min instead of ~4). Once the chat has replied (it's still loaded, ~30 s), keep chat models
+    # unloaded until the render is done.
+    import time
+
+    time.sleep(60)
+    end = time.time() + 30 * 60
+    while time.time() < end and job_status(job_id).startswith(("Rendering", "Waiting")):
+        _free_gpu()
+        time.sleep(5)
 
 
 @mcp.tool()
-def video_status(job_id: str) -> str:
-    """Check a make_video job. Returns the output file path when finished."""
+def job_status(job_id: str) -> str:
+    """Check a make_video job (or an image that took too long). Returns the output file path when finished."""
     h = httpx.get(f"{COMFY}/history/{job_id}", timeout=30).json()
     if job_id not in h:
         q = httpx.get(f"{COMFY}/queue", timeout=30).json()
@@ -169,8 +287,8 @@ def video_status(job_id: str) -> str:
     job = h[job_id]
     if job["status"].get("status_str") != "success":
         return f"Failed: {job['status'].get('messages', [])[-1:]}"
-    files = [f"{ROOT / 'data' / 'comfy-output' / o['subfolder'] / o['filename']}"
-             for out in job["outputs"].values() for o in out.get("images", [])]
+    files = [f"{OUTPUT / o['subfolder'] / o['filename']}"
+             for out in job["outputs"].values() for o in out.get("images", []) if o.get("type", "output") == "output"]
     return "Done: " + ", ".join(files)
 
 
