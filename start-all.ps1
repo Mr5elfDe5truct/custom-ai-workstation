@@ -106,7 +106,7 @@ $env:OLLAMA_FLASH_ATTENTION = "1"
 $env:OLLAMA_KV_CACHE_TYPE = "q8_0"
 Start-Bg "ollama" 11434 "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" "serve"
 
-# 2. llama.cpp router: Qwen3.6-35B uncensored + UI-TARS, loaded on demand, one at a time,
+# 2. llama.cpp router: Qwen3.6-35B and Qwen3.8-27B uncensored + UI-TARS, loaded on demand, one at a time,
 #    unloaded after 3 min idle so ComfyUI gets the GPU back.
 Start-Bg "llama-server" 8081 "$Root\bin\llama.cpp\llama-server.exe" @(
     "--models-preset", "`"$Runtime\llama-models.ini`"", "--models-max", "1",
@@ -125,6 +125,14 @@ $env:WEB_PLAYER_PATH = "$k\web"
 Start-Bg "kokoro" 8880 "$Root\envs\kokoro\Scripts\python.exe" `
     "-m uvicorn api.src.main:app --host 127.0.0.1 --port 8880" $k
 Remove-Item Env:PYTHONPATH
+
+# 3b. Voice server (voice pack): Whisper large-v3-turbo speech-to-text and VoxCPM2 text-to-speech on the GPU,
+#     each loaded on first use and unloaded when idle.
+$Voice = Test-Path "$Root\envs\voice\Scripts\python.exe"
+if ($Voice) {
+    $env:HF_HUB_DISABLE_SYMLINKS_WARNING = "1"
+    Start-Bg "voice" 8890 "$Root\envs\voice\Scripts\python.exe" "`"$Root\tools\voice_server.py`""
+}
 
 # 4. Tool server: research scout, webcam, video jobs, web fetch, files, shell (Desktop Commander), browser (Playwright).
 Start-Bg "mcpo" 8200 "$Root\envs\tools\Scripts\mcpo.exe" `
@@ -159,6 +167,17 @@ $env:ENABLE_EVALUATION_ARENA_MODELS = "False"
 $env:ENABLE_WEB_SEARCH = "True"
 $env:WEB_SEARCH_ENGINE = "duckduckgo"
 $env:WHISPER_MODEL = "base"
+if ($Voice) {
+    # Speech-to-text through the voice server (Whisper large-v3-turbo on the GPU); the built-in Whisper above runs
+    # on the CPU, where turbo takes ~25 s a sentence. Existing installs are switched over once by the script below.
+    $env:AUDIO_STT_ENGINE = "openai"
+    $env:AUDIO_STT_OPENAI_API_BASE_URL = "http://127.0.0.1:8890/v1"
+    $env:AUDIO_STT_OPENAI_API_KEY = "none"
+    $env:AUDIO_STT_MODEL = "whisper-large-v3-turbo"
+    if (-not (Test-Port 8080)) {
+        & "$Root\envs\open-webui\Scripts\python.exe" "$Root\scripts\owui-voice-config.py" "$Root\data\open-webui\webui.db"
+    }
+}
 $env:AUDIO_TTS_ENGINE = "openai"
 $env:AUDIO_TTS_OPENAI_API_BASE_URL = "http://127.0.0.1:8880/v1"
 $env:AUDIO_TTS_OPENAI_API_KEY = "none"
