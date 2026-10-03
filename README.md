@@ -64,6 +64,7 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | 💬 | **Chat with uncensored models** | Qwen3.6 35B-A3B (MoE with experts in system RAM), Qwen3.8 27B for deep reasoning, Qwen3.5 9B, Gemma 4 |
 | 👀 | **Webcam vision** | Open WebUI video call with Gemma 4, or the `webcam_snapshot` tool mid-chat |
 | 🎙️ | **Voice in and out** | Whisper large-v3-turbo speech-to-text on the GPU; Kokoro text-to-speech, or VoxCPM2 for designed and cloned voices |
+| 📞 | **Live calls** (Prestige) | Hands-free voice and webcam calls: Whisper, a Qwen3.5 vision model and VoxCPM2 all on the GPU at once, speech streamed as it's made, ~3 s from the end of your sentence to its voice |
 | 🧰 | **Tools** | web search, web fetch, files, PowerShell (guarded), Playwright browser control |
 | 🔭 | **Research scout** | Reddit, Hugging Face trending GGUFs and GitHub search, plus a Markdown scout report |
 | 🖱️ | **Computer use** | UI-TARS Desktop driven by a local UI-TARS-1.5-7B |
@@ -76,7 +77,7 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 
 **[Prestige by R.G. Studios](https://github.com/Mr5elfDe5truct/prestige)** is a native Windows app for this stack, an alternative to the
 Open WebUI window. It has streaming chat with every model, shared memory, a System dashboard with model load and unload, a Studio gallery
-with image and video generation, voice conversation with an animated avatar, and webcam vision. Opening it starts the stack, and closing it
+with image and video generation, voice conversation with an animated avatar, Live voice and webcam calls, and webcam vision. Opening it starts the stack, and closing it
 stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe5truct/prestige/releases) page.
 
 ## 🏗️ How it fits together
@@ -86,11 +87,11 @@ stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe
 | Port | Service | Notes |
 |---|---|---|
 | 8080 | Open WebUI | the app you use |
-| 11434 | Ollama | Gemma 4, Qwen3.5 9B, coders; unloads after 5 min idle |
+| 11434 | Ollama | Gemma 4, Qwen3.5 9B, Qwen3.5 2B / 4B (Prestige Live calls), coders; unloads after 5 min idle |
 | 8081 | llama.cpp router | Qwen3.6 35B, Qwen3.8 27B and UI-TARS, one at a time; unloads after 3 min idle (`bin/llama-models.ini`) |
 | 8188 | ComfyUI (headless) | its own install, or Comfy Desktop's; frees the GPU after each job |
 | 8880 | Kokoro | text-to-speech on CPU |
-| 8890 | voice server | Whisper large-v3-turbo speech-to-text and VoxCPM2 voices, OpenAI-compatible, on the GPU when used (`tools/voice_server.py`) |
+| 8890 | voice server | Whisper large-v3-turbo speech-to-text and VoxCPM2 voices, OpenAI-compatible, on the GPU when used; streams VoxCPM2 speech as raw PCM (`"stream": true`) and preloads both for Live calls (`/v1/audio/load`) (`tools/voice_server.py`) |
 | 8200 | mcpo tool server | research, webcam, fetch, images, image edits, video jobs, files, shell, browser (`tools/mcpo-config.json`) |
 
 The 12 GB GPU holds one big model at a time. Everything unloads when idle, so chat, images and video take turns.
@@ -105,6 +106,7 @@ The 12 GB GPU holds one big model at a time. Everything unloads when idle, so ch
 | Deep reasoning, uncensored, vision | Qwen3.8-27B HauhauCS Aggressive Q2_K_P, fully on the GPU with MTP drafting, 20k context | llama.cpp | ~10.9 GB | ~30–38 tok/s (Q3/IQ3 quants with layers in RAM: 5–8 tok/s) |
 | Fast, fully on GPU, uncensored | Qwen3.5-9B Uncensored Q4_K_M | Ollama | 6.7 GB | fast |
 | Vision / webcam | Gemma 4 (12B and e4b) | Ollama | 7–10 GB | good |
+| Live calls (Prestige) | Qwen3.5 4B with Kokoro voices, Qwen3.5 2B beside VoxCPM2 (vision, no thinking, 16k context) | Ollama | 3.4 / 2.7 GB | ~55 / ~60 tok/s; 3.3 / 2.4 GB VRAM |
 | Computer use | UI-TARS-1.5-7B Q5_K_M | llama.cpp | ~5.5 GB | on demand |
 | Images | Qwen-Image-2.1 Q4_K_M (uncensored), 20 steps, Qwen3-VL-8B text encoder | ComfyUI + GGUF | ~11.6 GB | ~80 s at 1024² (~110 s cold); peak 6–8 GB VRAM |
 | Images, fast | Qwen-Image-2.1 Viggle 4-step turbo Q4_K_M | ComfyUI + GGUF | +4.2 GB | ~25 s at 1024² |
@@ -114,7 +116,7 @@ The 12 GB GPU holds one big model at a time. Everything unloads when idle, so ch
 | Image → video | Wan 2.2 I2V A14B LightX2V 4-step Q4_K_M | ComfyUI + GGUF | ~25 GB | ~10 min for 5 s |
 | Speech to text | Whisper large-v3-turbo (int8) | voice server (faster-whisper) | 1.6 GB | ~0.1–0.7 s a sentence on the GPU (~25 s on the CPU, so the CPU fallback is `base`) |
 | Text to speech | Kokoro 82M | Kokoro-FastAPI | small | CPU, real time |
-| Expressive speech | VoxCPM2 2B: designed voices, cloning from a short clip, 48 kHz | voice server | 5 GB | ~1.3× real time; 5.7 GB VRAM, so chat models unload while it speaks |
+| Expressive speech | VoxCPM2 2B: designed voices, cloning from a short clip, 48 kHz | voice server | 5 GB | ~1.2× real time (first sound ~0.3 s when streamed); 6 GB VRAM, so chat models unload while it speaks (except the small Live model) |
 
 ## 🚀 Quick start
 
@@ -139,7 +141,7 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `vision` | Gemma 4 12B (Ollama) | 8 GB |
 | `main` | Qwen3.6 35B-A3B Heretic + vision (llama.cpp, needs 32 GB RAM) | 22 GB |
 | `deep` | Qwen3.8 27B Uncensored + vision (llama.cpp), the strongest reasoner, fully on a 12 GB GPU | 11 GB |
-| `voice` | Whisper large-v3-turbo speech-to-text and VoxCPM2 voices on the GPU (needs 8 GB+ VRAM); without it, Open WebUI's CPU Whisper `base` is used | 12 GB |
+| `voice` | Whisper large-v3-turbo speech-to-text and VoxCPM2 voices on the GPU (needs 8 GB+ VRAM), plus Qwen3.5 2B and 4B for Prestige's Live calls; without it, Open WebUI's CPU Whisper `base` is used | 18 GB |
 | `images` | Qwen-Image-2.1 text-to-image and editing, its 4-step turbo (ComfyUI GGUF), and Z-Image-Turbo | 37 GB |
 | `video` | Wan 2.2 image-to-video and LTX-2.5 text-to-video (ComfyUI GGUF) | 60 GB |
 | `computer` | UI-TARS 1.5 7B (llama.cpp) | 7 GB |
@@ -201,6 +203,9 @@ Three more are built in: **Cyberpunk Neon**, **Glass** (frosted panels over a co
 - **Other voices:** the voice server speaks with VoxCPM2 (`aria`, `sterling`, `nova`, `atlas`, `ember`, or a description such as
   "a cheerful old pirate"). Prestige can use it and clone a voice from a short clip. It needs ~6 GB of GPU memory, so the chat model
   unloads while it speaks and reloads for the next message; Kokoro stays the quick everyday voice.
+- **Live calls** (Prestige): click **Live** and just talk; talk over it to interrupt, and turn the camera on so it sees you.
+  Whisper turbo + VoxCPM2 + Qwen3.5 2B measure ~10.6 of 12 GB with the desktop (~1.4 GB free) and answer ~2.5–3.5 s after you stop
+  talking; with a Kokoro voice it uses Qwen3.5 4B. The `voice` pack pulls both models.
 - **Webcam:** voice mode → camera icon starts a video call (use Gemma 4). Or ask "take a webcam photo and tell me what you see".
 - **Images:** the image button under the message box, or just ask for one (Qwen-Image-2.1; ask for a quick one to get its 4-step turbo).
 - **Edit an image:** "edit C:\path\to.png: make it night". Add a second image as a reference (a face, product, outfit) or a black-and-white mask of the area to change.

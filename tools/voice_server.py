@@ -3,9 +3,11 @@
 OpenAI-compatible, so Open WebUI and Prestige use it like any speech API:
   POST /v1/audio/transcriptions   multipart file (+ language)       -> {"text": ...}
   POST /v1/audio/speech           {"input", "voice", "response_format"} -> audio (wav, or mp3 with ffmpeg)
+                                  {"stream": true} -> raw 16-bit mono PCM as it is made (rate in X-Sample-Rate)
   GET  /v1/audio/voices           VoxCPM2 voices: the built-in designed voices plus any clips in data\\voices
   POST /v1/audio/voices           multipart name + file (+ transcript): add a voice to clone
   POST /v1/audio/unload           frees the GPU (both models); Prestige calls it before a chat reply
+  POST /v1/audio/load             {"models": ["stt", "tts"], "voice"}: loads them now and keeps them warm (Live mode)
 
 Both models load on first use and unload after a few idle minutes. Whisper runs on the GPU (~1 GB, 0.1-0.3 s a
 sentence; ~25 s on the CPU) and falls back to the CPU base model when the GPU is full. VoxCPM2 needs ~6 GB of GPU
@@ -16,6 +18,7 @@ Run: envs\\voice\\Scripts\\python.exe tools\\voice_server.py   (port 8890; start
 import asyncio
 import io
 import os
+import queue
 import re
 import shutil
 import subprocess
@@ -31,7 +34,7 @@ import torch
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 ROOT = Path(__file__).resolve().parent.parent
 WHISPER_DIR = ROOT / "models" / "whisper"
@@ -52,12 +55,15 @@ DESIGNED = {
     "atlas": "A rich, steady middle-aged male narrator, warm and authoritative",
     "ember": "A soft, husky female voice, intimate and slow-paced",
 }
+WARMUP = ("Sure, I can see it now: there's a mug of coffee on the left, a keyboard in front of you and a lamp behind the "
+          "monitor, and it all looks pretty tidy to me, honestly.")
 SAMPLE = "Hello there. It's good to hear from you, and I'm ready whenever you are. What should we make today?"
 
 app = FastAPI(title="Workstation voice")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 gpu_lock = threading.Lock()  # one GPU job at a time
 state = {"whisper": None, "whisper_device": None, "whisper_used": 0.0, "tts": None, "tts_used": 0.0}
+prompt_cache: dict = {}  # voice -> (clip mtime, VoxCPM2 prompt cache): a clip is encoded once, not every sentence
 
 
 def _free_vram() -> int:
@@ -96,6 +102,8 @@ def _unload(which: str):
         state[which] = None
         if which == "whisper":
             state["whisper_device"] = None
+        else:
+            prompt_cache.clear()
         import gc
 
         gc.collect()
@@ -119,11 +127,14 @@ def _whisper():
     return state["whisper"]
 
 
-def _transcribe(path: str, language: str | None) -> str:
+def _transcribe(path: str, language: str | None, beam: int = 5) -> str:
+    # Greedy (beam 1) is Live mode: its clips are already cut to the speech, so Whisper's own voice filter and
+    # timestamps are skipped too.
+    kw = {"vad_filter": True} if beam > 1 else {"vad_filter": False, "without_timestamps": True}
     with gpu_lock:
         model = _whisper()
         try:
-            segs, _ = model.transcribe(path, language=language or None, beam_size=5, vad_filter=True)
+            segs, _ = model.transcribe(path, language=language or None, beam_size=beam, **kw)
             text = " ".join(s.text.strip() for s in segs)
         except RuntimeError as e:  # out of GPU memory mid-run: retry once on the CPU
             if state["whisper_device"] != "cuda":
@@ -134,7 +145,7 @@ def _transcribe(path: str, language: str | None) -> str:
 
             state["whisper"] = WhisperModel("base", device="cpu", compute_type="int8", download_root=str(WHISPER_DIR))
             state["whisper_device"] = "cpu"
-            segs, _ = state["whisper"].transcribe(path, language=language or None, beam_size=5, vad_filter=True)
+            segs, _ = state["whisper"].transcribe(path, language=language or None, beam_size=beam, **kw)
             text = " ".join(s.text.strip() for s in segs)
         state["whisper_used"] = time.time()
         return text.strip()
@@ -142,12 +153,13 @@ def _transcribe(path: str, language: str | None) -> str:
 
 @app.post("/v1/audio/transcriptions")
 async def transcriptions(file: UploadFile = File(...), model: str = Form(""), language: str = Form(""),
-                         response_format: str = Form("json")):
+                         response_format: str = Form("json"), beam_size: int = Form(5)):
+    # Live mode sends beam_size 1: greedy decoding is quicker on a short utterance and as accurate for plain speech.
     suffix = Path(file.filename or "audio.webm").suffix or ".webm"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
         f.write(await file.read())
     try:
-        text = await asyncio.to_thread(_transcribe, f.name, language.strip().lower() or None)
+        text = await asyncio.to_thread(_transcribe, f.name, language.strip().lower() or None, max(1, min(beam_size, 5)))
     finally:
         os.unlink(f.name)
     if response_format == "text":
@@ -184,31 +196,74 @@ def _voice_list():
     return sorted(names, key=lambda n: (n not in DESIGNED, n))
 
 
+def _voice_kw(model, voice: str) -> dict:
+    """The cloning arguments for a voice (rendering a designed voice the first time it is used)."""
+    sr = model.tts_model.sample_rate
+    wav_path, transcript = _voice_files(voice)
+    if not wav_path.exists() and voice in DESIGNED:
+        # First use of a designed voice: render it from its description, then clone it from now on.
+        VOICES.mkdir(parents=True, exist_ok=True)
+        sample = model.generate(text=f"({DESIGNED[voice]}){SAMPLE}", cfg_value=2.0, inference_timesteps=10)
+        sf.write(wav_path, sample, sr)
+        wav_path.with_suffix(".txt").write_text(SAMPLE, encoding="utf-8")
+        transcript = SAMPLE
+    kw = {}
+    if wav_path.exists() and sf.info(str(wav_path)).duration < 1:
+        raise HTTPException(400, f"the voice clip for {voice} is empty; add it again with Clone a voice")
+    if wav_path.exists():
+        kw["reference_wav_path"] = str(wav_path)
+        if transcript:  # "ultimate cloning": the clip plus what it says keeps the voice closest
+            kw["prompt_wav_path"] = str(wav_path)
+            kw["prompt_text"] = transcript
+    return kw
+
+
+def _style(voice: str) -> str:
+    # A voice that isn't a file is a description: "(a cheerful old man)" style prompts.
+    return "" if _voice_files(voice)[0].exists() or not voice or voice == "default" else f"({voice})"
+
+
+def _cached_prompt(model, voice: str, kw: dict):
+    """VoxCPM2's encoding of a voice clip, made once per clip instead of once per sentence."""
+    if not kw or not hasattr(model.tts_model, "build_prompt_cache"):
+        return None
+    mtime = Path(kw["reference_wav_path"]).stat().st_mtime
+    hit = prompt_cache.get(voice)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    cache = model.tts_model.build_prompt_cache(prompt_text=kw.get("prompt_text"), prompt_wav_path=kw.get("prompt_wav_path"),
+                                               reference_wav_path=kw.get("reference_wav_path"))
+    prompt_cache[voice] = (mtime, cache)
+    # Encoding the clip briefly needs ~0.5 GB more than speaking does; hand that back rather than keep it reserved.
+    torch.cuda.empty_cache()
+    return cache
+
+
+def _chunks(model, text: str, voice: str, steps: int, streaming: bool):
+    """Audio for `text` in `voice`: one array, or (streaming) a piece at a time as it is made."""
+    kw = _voice_kw(model, voice)
+    text = _style(voice) + text
+    cache = _cached_prompt(model, voice, kw)
+    if cache is not None or not kw:
+        gen = model.tts_model._generate_with_prompt_cache(target_text=text, prompt_cache=cache, inference_timesteps=steps,
+                                                          cfg_value=2.0, retry_badcase=not streaming, streaming=streaming)
+        try:
+            for wav, _, _ in gen:
+                yield wav.squeeze(0).float().cpu().numpy()
+        finally:
+            gen.close()
+    elif streaming:
+        yield from model.generate_streaming(text=text, cfg_value=2.0, inference_timesteps=steps, **kw)
+    else:
+        yield model.generate(text=text, cfg_value=2.0, inference_timesteps=steps, **kw)
+
+
 def _speak(text: str, voice: str, steps: int) -> tuple[np.ndarray, int]:
     with gpu_lock:
         model = _voxcpm()
-        sr = model.tts_model.sample_rate
-        wav_path, transcript = _voice_files(voice)
-        if not wav_path.exists() and voice in DESIGNED:
-            # First use of a designed voice: render it from its description, then clone it from now on.
-            VOICES.mkdir(parents=True, exist_ok=True)
-            sample = model.generate(text=f"({DESIGNED[voice]}){SAMPLE}", cfg_value=2.0, inference_timesteps=10)
-            sf.write(wav_path, sample, sr)
-            wav_path.with_suffix(".txt").write_text(SAMPLE, encoding="utf-8")
-            transcript = SAMPLE
-        kw = {}
-        if wav_path.exists() and sf.info(str(wav_path)).duration < 1:
-            raise HTTPException(400, f"the voice clip for {voice} is empty; add it again with Clone a voice")
-        if wav_path.exists():
-            kw["reference_wav_path"] = str(wav_path)
-            if transcript:  # "ultimate cloning": the clip plus what it says keeps the voice closest
-                kw["prompt_wav_path"] = str(wav_path)
-                kw["prompt_text"] = transcript
-        # A voice that isn't a file is a description: "(a cheerful old man)" style prompts.
-        style = "" if wav_path.exists() or not voice or voice == "default" else f"({voice})"
-        audio = model.generate(text=style + text, cfg_value=2.0, inference_timesteps=steps, **kw)
+        audio = np.concatenate(list(_chunks(model, text, voice, steps, False)))
         state["tts_used"] = time.time()
-        return audio, sr
+        return audio, model.tts_model.sample_rate
 
 
 def _encode(audio: np.ndarray, sr: int, fmt: str) -> tuple[bytes, str]:
@@ -231,10 +286,90 @@ async def speech(body: dict):
         raise HTTPException(400, "input is empty")
     voice = str(body.get("voice") or "aria").strip()
     steps = int(body.get("steps") or VOXCPM_STEPS)
+    if body.get("stream"):
+        return await _stream_speech(text, voice, steps)
     audio, sr = await asyncio.to_thread(_speak, text, voice, steps)
     # No "speed": VoxCPM2 takes pace from the text, or from a style note like "(slightly faster)".
     data, mime = _encode(audio, sr, body.get("response_format", "wav"))
     return Response(data, media_type=mime)
+
+
+async def _stream_speech(text: str, voice: str, steps: int):
+    """Raw PCM as VoxCPM2 makes it, so playback starts after the first piece instead of the whole sentence.
+    The model runs in its own thread; when the client hangs up (Live mode's barge-in) it stops after the current piece."""
+    out: queue.Queue = queue.Queue()
+    cancel = threading.Event()
+
+    def work():
+        try:
+            with gpu_lock:
+                model = _voxcpm()
+                out.put(("sr", model.tts_model.sample_rate))
+                gen = _chunks(model, text, voice, steps, True)
+                try:
+                    for chunk in gen:
+                        if cancel.is_set():
+                            break
+                        out.put(("pcm", (np.clip(chunk, -1, 1) * 32767).astype("<i2").tobytes()))
+                finally:
+                    gen.close()
+                state["tts_used"] = time.time()
+        except HTTPException as e:
+            out.put(("error", e))
+        except Exception as e:  # noqa: BLE001 - reported to the client
+            out.put(("error", HTTPException(500, f"VoxCPM2 failed: {e}")))
+        finally:
+            out.put(("end", None))
+
+    threading.Thread(target=work, daemon=True).start()
+    kind, val = await asyncio.to_thread(out.get)  # the sample rate, or why it couldn't start
+    if kind == "error":
+        raise val
+    if kind != "sr":
+        raise HTTPException(500, "VoxCPM2 stopped before speaking")
+    rate = val
+
+    async def body():
+        try:
+            while True:
+                kind, val = await asyncio.to_thread(out.get)
+                if kind != "pcm":
+                    break
+                yield val
+        finally:
+            cancel.set()
+
+    return StreamingResponse(body(), media_type="audio/L16", headers={
+        "X-Sample-Rate": str(rate), "Cache-Control": "no-store", "Access-Control-Expose-Headers": "X-Sample-Rate"})
+
+
+@app.post("/v1/audio/load")
+def load(body: dict | None = None):
+    """Loads the models now and keeps them from idling out, so a Live call's first turn doesn't wait for them."""
+    body = body or {}
+    which = body.get("models") or ["stt", "tts"]
+    voice = str(body.get("voice") or "").strip()
+    with gpu_lock:
+        # A new model's first run is slow (CUDA kernels warming up), so do one now rather than on the first question.
+        if "stt" in which:
+            fresh = state["whisper"] is None
+            model = _whisper()
+            if fresh:
+                list(model.transcribe(np.zeros(16000, dtype=np.float32), language="en", beam_size=1)[0])
+        if "tts" in which:
+            fresh = state["tts"] is None
+            model = _voxcpm()
+            if voice:
+                _cached_prompt(model, voice, _voice_kw(model, voice))
+            if fresh:
+                # As long a sentence as Live sends: PyTorch keeps the working memory it reserves here, so a model
+                # loaded next to VoxCPM2 (the Live chat model) can't take it, and a long sentence later doesn't
+                # spill into system RAM (on Windows that makes it many times slower instead of failing).
+                for _ in _chunks(model, WARMUP, voice or "aria", 4, True):
+                    pass
+            state["tts_used"] = time.time()
+    return {"ok": True, "whisper": state["whisper_device"], "voxcpm2": state["tts"] is not None,
+            "free_vram_gb": round(_free_vram() / 1e9, 1)}
 
 
 @app.get("/v1/audio/voices")
@@ -295,7 +430,8 @@ def unload(body: dict | None = None):
 @app.get("/health")
 def health():
     return {"status": "ok", "whisper": state["whisper_device"], "voxcpm2": state["tts"] is not None,
-            "free_vram_gb": round(_free_vram() / 1e9, 1)}
+            "free_vram_gb": round(_free_vram() / 1e9, 1),
+            "torch_reserved_gb": round(torch.cuda.memory_reserved() / 1e9, 2) if torch.cuda.is_available() else 0}
 
 
 @app.get("/v1/models")
