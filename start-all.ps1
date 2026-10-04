@@ -3,8 +3,11 @@
 #   .\start-all.ps1 -NoComfy   skip the headless ComfyUI (use this if you prefer the Comfy Desktop app)
 #   .\start-all.ps1 -NoBrowser don't open the app window at the end
 #   .\start-all.ps1 -Theme neon default theme: dragon, neon, glass, hud or off (Ctrl+Alt+T switches in the app)
+#   .\start-all.ps1 -GpuMode pool  with several GPUs: split (default), pool or single, for this start only
+#                                  (data\gpu-settings.json sets it for good; see docs\GPUS.md)
 param([switch]$NoComfy, [switch]$NoBrowser,
-      [ValidateSet("dragon", "neon", "glass", "hud", "off")][string]$Theme = "dragon")
+      [ValidateSet("dragon", "neon", "glass", "hud", "off")][string]$Theme = "dragon",
+      [ValidateSet("", "auto", "single", "split", "pool")][string]$GpuMode = "")
 
 $Root = $PSScriptRoot
 $Logs = Join-Path $Root "logs"
@@ -21,7 +24,17 @@ function Expand-Template($src, $dst, [switch]$Json) {
     $text = (Get-Content -Raw $src).Replace('{ROOT}', $r).Replace('{HOME}', $h)
     [IO.File]::WriteAllText($dst, $text, (New-Object Text.UTF8Encoding $false))
 }
+# Which GPU each service runs on (scripts\gpu-config.ps1), saved for Prestige and the voice and tool servers.
+. "$Root\scripts\gpu-config.ps1"
+$GpuPlan = Get-GpuPlan $Root $GpuMode
+$services = { if (Test-Path "$Runtime\gpu.json") { (Get-Content -Raw "$Runtime\gpu.json" | ConvertFrom-Json).services | ConvertTo-Json -Compress } }
+$before = & $services
+Save-GpuPlan $GpuPlan "$Runtime\gpu.json"
+$GpuMoved = $before -and $before -ne (& $services)   # a service that's already running stays on its old card
 Expand-Template "$Root\bin\llama-models.ini" "$Runtime\llama-models.ini"
+# On anything but one 12 GB card, the ini's hand-tuned offload settings give way to llama.cpp's --fit.
+[IO.File]::WriteAllText("$Runtime\llama-models.ini", (Convert-LlamaIni (Get-Content -Raw "$Runtime\llama-models.ini") $GpuPlan),
+    (New-Object Text.UTF8Encoding $false))
 Expand-Template "$Root\tools\mcpo-config.json" "$Runtime\mcpo-config.json" -Json
 
 # ComfyUI: the one install.ps1 puts in apps\ComfyUI, or else an existing Comfy Desktop install.
@@ -87,30 +100,38 @@ function Test-Port($port) {
     [bool](Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
 }
 
-function Start-Bg($name, $port, $exe, $argList, $workDir = $Root) {
-    if (Test-Port $port) { Write-Host "  $name already running (port $port)"; return }
+# $gpuService: the service in the GPU plan whose cards this process may use (none: it doesn't use the GPU).
+function Start-Bg($name, $port, $exe, $argList, $workDir = $Root, $gpuService = $null) {
+    if (Test-Port $port) {
+        $where = if ($gpuService -and $GpuMoved) { "; it stays on the GPU it started on (stop-all.ps1 and start again to move it)" } else { "" }
+        Write-Host "  $name already running (port $port)$where"; return
+    }
+    if ($gpuService) { Set-ServiceGpus $GpuPlan $gpuService } else { Remove-Item Env:CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue }
     Start-Process -FilePath $exe -ArgumentList $argList -WorkingDirectory $workDir -WindowStyle Hidden `
         -RedirectStandardOutput "$Logs\$name.log" -RedirectStandardError "$Logs\$name.err.log"
     Write-Host "  started $name (port $port)"
 }
 
 Write-Host "Starting Custom AI workstation..."
+Write-Host (Format-GpuPlan $GpuPlan)
 
 # 1. Ollama: Gemma 4 (webcam/vision), Qwen3.5-9B uncensored, coders. Unloads after 5 min idle.
+#    With several GPUs it runs on the small card (split), so chat stays loaded while ComfyUI renders on the big one.
 $env:OLLAMA_MODELS = "$Root\models\ollama"
 $env:OLLAMA_KEEP_ALIVE = "5m"
 # Ollama picks 4096 tokens on a 12 GB card, which the memory + tool prompts overflow (~6k tokens
-# for a bare "Hello" in voice mode). 32k with a q8 KV cache still fits each model on the GPU.
-$env:OLLAMA_CONTEXT_LENGTH = "32768"
+# for a bare "Hello" in voice mode). 32k with a q8 KV cache still fits each model on a 12 GB card; the GPU plan
+# gives smaller cards 16k (8k under 5.5 GB) so the model stays on the GPU.
+$env:OLLAMA_CONTEXT_LENGTH = if ($GpuPlan) { "$($GpuPlan.OllamaContext)" } else { "32768" }
 $env:OLLAMA_FLASH_ATTENTION = "1"
 $env:OLLAMA_KV_CACHE_TYPE = "q8_0"
-Start-Bg "ollama" 11434 "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" "serve"
+Start-Bg "ollama" 11434 "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe" "serve" $Root "ollama"
 
 # 2. llama.cpp router: Qwen3.6-35B and Qwen3.8-27B uncensored + UI-TARS, loaded on demand, one at a time,
 #    unloaded after 3 min idle so ComfyUI gets the GPU back.
 Start-Bg "llama-server" 8081 "$Root\bin\llama.cpp\llama-server.exe" @(
     "--models-preset", "`"$Runtime\llama-models.ini`"", "--models-max", "1",
-    "--sleep-idle-seconds", "180", "--host", "127.0.0.1", "--port", "8081")
+    "--sleep-idle-seconds", "180", "--host", "127.0.0.1", "--port", "8081") $Root "llama"
 
 # 3. Kokoro text-to-speech (CPU).
 $k = "$Root\apps\Kokoro-FastAPI"
@@ -131,7 +152,7 @@ Remove-Item Env:PYTHONPATH
 $Voice = Test-Path "$Root\envs\voice\Scripts\python.exe"
 if ($Voice) {
     $env:HF_HUB_DISABLE_SYMLINKS_WARNING = "1"
-    Start-Bg "voice" 8890 "$Root\envs\voice\Scripts\python.exe" "`"$Root\tools\voice_server.py`""
+    Start-Bg "voice" 8890 "$Root\envs\voice\Scripts\python.exe" "`"$Root\tools\voice_server.py`"" $Root "voice"
 }
 
 # 4. Tool server: research scout, webcam, video jobs, web fetch, files, shell (Desktop Commander), browser (Playwright).
@@ -144,7 +165,7 @@ if (-not $NoComfy -and $ComfyDir) {
     Start-Bg "comfyui" 8188 $ComfyPython @(
         "main.py", "--listen", "127.0.0.1", "--port", "8188", "--disable-smart-memory",
         "--extra-model-paths-config", "`"$Runtime\comfy-extra-models.yaml`"",
-        "--output-directory", "`"$Root\data\comfy-output`"") $ComfyDir
+        "--output-directory", "`"$Root\data\comfy-output`"") $ComfyDir "comfyui"
 } elseif (-not $NoComfy) {
     Write-Host "  ComfyUI isn't installed (run install.ps1), so images and video are off"
 }
@@ -197,7 +218,8 @@ foreach ($dir in "$owui\frontend\static", "$owui\static") {
         Set-Content -Path "$dir\loader.js" -Value $loader -Encoding UTF8
     }
 }
-Start-Bg "open-webui" 8080 "$Root\envs\open-webui\Scripts\open-webui.exe" "serve --host 127.0.0.1 --port 8080"
+Start-Bg "open-webui" 8080 "$Root\envs\open-webui\Scripts\open-webui.exe" "serve --host 127.0.0.1 --port 8080" $Root "openwebui"
+Remove-Item Env:CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue
 
 Write-Host "Waiting for Open WebUI..."
 for ($i = 0; $i -lt 90; $i++) {

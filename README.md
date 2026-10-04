@@ -96,6 +96,8 @@ stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe
 | 8200 | mcpo tool server | research, webcam, fetch, images, image edits, video jobs, files, shell, browser (`tools/mcpo-config.json`) |
 
 The 12 GB GPU holds one big model at a time. Everything unloads when idle, so chat, images and video take turns.
+With two or more NVIDIA cards, the small models (Ollama) run on one card and the big model and ComfyUI on another, so
+chat keeps going while a render runs. Small cards get smaller models and contexts. See [docs/GPUS.md](docs/GPUS.md).
 
 ## 🖥️ Hardware and models
 
@@ -122,13 +124,28 @@ The 12 GB GPU holds one big model at a time. Everything unloads when idle, so ch
 | Text to speech | Kokoro 82M | Kokoro-FastAPI | small | CPU, real time |
 | Expressive speech | VoxCPM2 2B: designed voices, cloning from a short clip, 48 kHz | voice server | 5 GB | ~1.2× real time (first sound ~0.3 s when streamed); 6 GB VRAM, so chat models unload while it speaks (except the small Live model) |
 
+### 🎛️ GPUs: one card, several cards, small cards
+
+`start-all.ps1` reads the cards with `nvidia-smi` on every start and pins each service to a card:
+
+| Mode | What runs where |
+|---|---|
+| `single` | everything on the biggest card (the only mode with one card) |
+| `split` | **default with two or more cards**: Ollama and Open WebUI's embeddings on the second card, llama.cpp and ComfyUI on the biggest; the voice server joins the small card when it has 8 GB or more |
+| `pool` | like split, but llama.cpp spreads the big model over every card |
+
+On cards other than 12 GB, llama.cpp sizes its offload to the card itself (`--fit`), Ollama's context drops to
+16k (8k under 5.5 GB), and the installer picks Ollama models that fit the card they'll run on. Switch with
+`.\start-all.ps1 -GpuMode pool`, or for good in `data\gpu-settings.json`. [docs/GPUS.md](docs/GPUS.md) has the details,
+every setting, and measurements from an RTX 3060 12 GB + RTX 2060 6 GB.
+
 ## 🚀 Quick start
 
 This repo holds the glue: launch scripts, configs, ComfyUI workflows, and the custom tool server. The installer
 adds everything else (see [PLAN.md](PLAN.md) for the full build log and every source).
 
 **1. Install.** You need Windows 10/11 (64-bit), an NVIDIA GPU with a current driver, and
-about 40 GB free. Download **Workstation-Setup.zip** from
+about 40 GB free. One card of 6 GB or more works; 12 GB is what it's tuned for, and more cards are used if you have them. Download **Workstation-Setup.zip** from
 [Releases](https://github.com/Mr5elfDe5truct/custom-ai-workstation/releases/latest), unzip it and double-click
 **setup.cmd**. Or from PowerShell:
 
@@ -141,8 +158,8 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 
 | Pack | What it adds | Size |
 |---|---|---|
-| `fast` | Qwen3.5 9B Uncensored (Ollama) | 6.7 GB |
-| `vision` | Gemma 4 12B (Ollama) | 8 GB |
+| `fast` | Qwen3.5 9B Uncensored (Ollama); Qwen3.5 4B when Ollama's card has under 7.5 GB | 6.7 GB |
+| `vision` | Gemma 4 12B (Ollama); Qwen3-VL 8B on 7.5-10 GB cards, Qwen3.5 4B below | 8 GB |
 | `main` | Qwen3.6 35B-A3B Heretic + vision (llama.cpp, needs 32 GB RAM) | 22 GB |
 | `deep` | Qwen3.8 27B Uncensored + vision (llama.cpp), the strongest reasoner, fully on a 12 GB GPU | 11 GB |
 | `voice` | Whisper large-v3-turbo speech-to-text and VoxCPM2 voices on the GPU (needs 8 GB+ VRAM), plus Qwen3.5 2B and 4B for Prestige's Live calls; without it, Open WebUI's CPU Whisper `base` is used | 18 GB |
@@ -162,6 +179,7 @@ resume, so you can run it again to add packs or finish an interrupted install. O
 .\install.ps1 -Packs fast,images -Yes     # no questions
 .\install.ps1 -Packs none                 # software only, no models
 .\install.ps1 -NoPrestige -NoShortcuts    # skip the Prestige app and shortcuts
+.\install.ps1 -GpuMode pool              # several GPUs: split (default, asked otherwise), pool or single
 ```
 
 The configs use `{ROOT}` for the install folder; `start-all.ps1` writes the real paths to `data\runtime` on each start.
@@ -238,6 +256,7 @@ start-all.ps1 · stop-all.ps1 · start-computer-use.ps1   launch and stop everyt
 open-app.ps1 · install-shortcut.ps1                     Open WebUI app window and Desktop/Start Menu shortcut
 install.ps1 · setup.cmd       installer (setup.cmd runs install.ps1)
 bin/llama-models.ini         llama.cpp router presets (Qwen3.6, Qwen3.8, UI-TARS)
+scripts/gpu-config.ps1       which GPU each service runs on, and what fits on it (docs/GPUS.md)
 requirements/*.txt           pinned Python packages for the installer
 tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot, images, image edits, video jobs
 tools/voice_server.py        voice server: Whisper turbo speech-to-text, VoxCPM2 speech and voice cloning
@@ -245,6 +264,7 @@ tools/mcpo-config.json       MCP servers exposed to Open WebUI through mcpo
 workflows/*.api.json         ComfyUI API workflows (Qwen-Image-2.1, its edit and reference-image graphs, Z-Image-Turbo, LTX-2.5 and LTX-2.3 text- and image-to-video, Wan 2.2, and Wan 2.2 SVI long video)
 scripts/                     video model downloader, ComfyUI workflow runner, release packager, Open WebUI voice setup
 theme/custom.css · loader.js  Open WebUI themes and the theme switcher
+docs/GPUS.md                 several GPUs and small cards: modes, settings, measurements
 docs/assets/                 README art and samples
 PLAN.md                      design notes, component choices and sources
 ```

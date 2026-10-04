@@ -8,6 +8,7 @@
 #   .\install.ps1 -Root D:\AI\Workstation       somewhere else
 #   .\install.ps1 -Yes -Packs fast,images       no questions, these model packs
 #   .\install.ps1 -Packs none                   software only, no models
+#   .\install.ps1 -GpuMode pool                 with several GPUs: split (default), pool or single
 # Without cloning first, from PowerShell:
 #   irm https://raw.githubusercontent.com/Mr5elfDe5truct/custom-ai-workstation/main/install.ps1 -OutFile "$env:TEMP\install.ps1"
 #   powershell -ExecutionPolicy Bypass -File "$env:TEMP\install.ps1"
@@ -20,6 +21,7 @@ param(
     [switch]$NoShortcuts,     # leave the Desktop / Start Menu shortcuts alone
     [switch]$NoComfyDesktop,  # install ComfyUI into the workstation even if Comfy Desktop is present
     [switch]$NoGpuCheck,      # carry on without an NVIDIA GPU (for testing the installer, e.g. in Windows Sandbox)
+    [ValidateSet("", "split", "pool", "single")][string]$GpuMode,   # with several GPUs (asked otherwise; docs\GPUS.md)
     [string]$Branch = "main"
 )
 $ErrorActionPreference = "Stop"
@@ -119,13 +121,30 @@ $os = (Get-CimInstance Win32_OperatingSystem).Caption
 Ok $os
 $ramGB = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
 Ok "$ramGB GB RAM"
-$cudaMajor = 0; $gpuName = $null; $vramGB = 0
+$cudaMajor = 0; $vramGB = 0; $ollamaGB = 0; $gpus = @()
 if (Has nvidia-smi) {
-    $q = (& nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits | Select-Object -First 1) -split ","
-    $gpuName = $q[0].Trim(); $vramGB = [math]::Round([double]$q[1] / 1024)
+    $gpus = @(& nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader,nounits | ForEach-Object {
+        $f = $_ -split ",\s*"
+        [pscustomobject]@{ Index = [int]$f[0]; Name = ($f[1].Trim() -replace "^NVIDIA (GeForce )?", ""); GB = [math]::Round([double]$f[2] / 1024, 1) }
+    } | Sort-Object @{ Expression = "GB"; Descending = $true }, Index)
     $cv = [regex]::Match((& nvidia-smi | Out-String), "CUDA (?:UMD )?Version:\s*([\d.]+)").Groups[1].Value
     $cudaMajor = if ($cv) { [int]($cv.Split(".")[0]) } else { 12 }
-    Ok "$gpuName, $vramGB GB VRAM, driver supports CUDA $cv"
+    foreach ($g in $gpus) { Ok "$($g.Name), $($g.GB) GB VRAM" }
+    Ok "driver supports CUDA $cv"
+    # The biggest card runs llama.cpp's big model and ComfyUI. With two or more, Ollama (chat, vision, Live calls) runs
+    # on the second card in split and pool modes, so its models are picked to fit that card (docs\GPUS.md).
+    $vramGB = $gpus[0].GB
+    $ollamaGB = $vramGB
+    if ($gpus.Count -gt 1) {
+        if (-not $GpuMode) {
+            Say "    split: chat, vision and Live models on the $($gpus[1].Name), the big model and images on the $($gpus[0].Name)" DarkGray
+            Say "    pool:  like split, but the big model spreads over every card    single: only the $($gpus[0].Name)" DarkGray
+            $GpuMode = (Ask "Several GPUs: split, pool or single?" "split").ToLower()
+        }
+        if ($GpuMode -notin "split", "pool", "single") { Warn "Unknown GPU mode '$GpuMode', using split"; $GpuMode = "split" }
+        if ($GpuMode -ne "single") { $ollamaGB = $gpus[1].GB }
+        Ok "GPU mode: $GpuMode"
+    }
     if ($vramGB -lt 8) { Warn "Less than 8 GB of VRAM: stick to the small models" }
 } else {
     Warn "No NVIDIA GPU found (nvidia-smi is missing). The stack needs an NVIDIA GPU with a recent driver."
@@ -148,9 +167,23 @@ Ok $Root
 if ($Root -like "$env:ProgramFiles*") { Warn "Program Files isn't a good place: the services write logs, data and models into this folder." }
 
 # ---------- 3. which models ----------
+# Ollama's models are picked for the card it runs on, so they stay on the GPU: the 9B fast chat needs ~6.5 GB with its
+# context and Gemma 4 12B ~9 GB; on a 6 GB card both fall back to the CPU (7-8 tok/s) while Qwen3.5 4B, which also
+# sees pictures, runs fully on it (~60 tok/s). Qwen3-VL 8B is the vision model for 8-10 GB cards.
+$OllamaPicks = @{
+    fast   = if ($ollamaGB -ge 7.5 -or -not $gpus) { "hf.co/LEONW24/Qwen3.5-9B-Uncensored:Q4_K_M" } else { "qwen3.5:4b" }
+    vision = if ($ollamaGB -ge 10 -or -not $gpus) { "gemma4:12b" } elseif ($ollamaGB -ge 7.5) { "qwen3-vl:8b" } else { "qwen3.5:4b" }
+}
+$fastText = if ($OllamaPicks.fast -like "*9B*") { @{ GB = 6.7; Text = "Fast chat      Qwen3.5 9B Uncensored (Ollama) - fits fully on an 8-12 GB GPU" } }
+            else { @{ GB = 3.4; Text = "Fast chat      Qwen3.5 4B (Ollama) - picked for the $ollamaGB GB card, where the 9B would run from RAM" } }
+$visionText = switch ($OllamaPicks.vision) {
+    "gemma4:12b"  { @{ GB = 8.0; Text = "Vision         Gemma 4 12B (Ollama) - pictures, the webcam, tools" } }
+    "qwen3-vl:8b" { @{ GB = 6.1; Text = "Vision         Qwen3-VL 8B (Ollama) - pictures, the webcam, tools; fits the $ollamaGB GB card" } }
+    default       { @{ GB = 3.4; Text = "Vision         Qwen3.5 4B (Ollama) - pictures and the webcam; fits the $ollamaGB GB card" } }
+}
 $PackInfo = [ordered]@{
-    fast     = @{ GB = 6.7;  Text = "Fast chat      Qwen3.5 9B Uncensored (Ollama) - fits fully on an 8-12 GB GPU" }
-    vision   = @{ GB = 8.0;  Text = "Vision         Gemma 4 12B (Ollama) - pictures, the webcam, tools" }
+    fast     = $fastText
+    vision   = $visionText
     main     = @{ GB = 22.1; Text = "Main           Qwen3.6 35B Heretic (llama.cpp) - best quality; needs 32 GB RAM" }
     deep     = @{ GB = 10.9; Text = "Deep           Qwen3.8 27B Uncensored (llama.cpp) - strongest reasoning, ~30 tok/s on 12 GB" }
     voice    = @{ GB = 18.1; Text = "Voice          Whisper turbo + VoxCPM2 voices and cloning + Qwen3.5 2B/4B for Live calls (GPU, 8 GB+)" }
@@ -183,6 +216,12 @@ $Packs = @(foreach ($t in ($Packs -split "[,\s]+" | Where-Object { $_ })) { if (
 $Packs = @($Packs | Where-Object { $_ -and $_ -ne "none" } | Select-Object -Unique)
 foreach ($p in $Packs) { if (-not $PackInfo.Contains($p)) { throw "Unknown model pack '$p'. Choose from: $($PackInfo.Keys -join ', '), all, none" } }
 if ($Packs -contains "main" -and $ramGB -lt 32) { Warn "The main model wants 32 GB of RAM; with $ramGB GB it may not load." }
+if ($gpus) {
+    # llama.cpp sizes its offload to the card (--fit) and ComfyUI moves what doesn't fit to RAM, so these still run, slower.
+    if ($Packs -contains "deep" -and $vramGB -lt 11) { Warn "The deep model fits whole on 12 GB; on $vramGB GB part of it runs from RAM (a few tok/s)." }
+    if ($Packs -contains "voice" -and $vramGB -lt 8) { Warn "VoxCPM2 voices need ~7 GB of VRAM; on $vramGB GB stick to the Kokoro voices." }
+    if (($Packs -contains "images" -or $Packs -contains "video") -and $vramGB -lt 10) { Warn "Images and video are tuned for 12 GB; on $vramGB GB they render, but slower." }
+}
 $needGB = 12 + ($Packs | ForEach-Object { $PackInfo[$_].GB } | Measure-Object -Sum).Sum   # ~12 GB for software
 $drive = Get-PSDrive ((Split-Path $Root -Qualifier).TrimEnd(":"))
 $freeGB = [math]::Round($drive.Free / 1GB)
@@ -218,6 +257,14 @@ if (Test-Path (Join-Path $Root "start-all.ps1")) {
 Set-Location $Root
 foreach ($d in "apps", "bin", "envs", "logs", "data", "models\gguf", "models\ollama", "models\comfy") {
     New-Item -ItemType Directory -Force (Join-Path $Root $d) | Out-Null
+}
+# The GPU mode picked above goes in data\gpu-settings.json, which start-all.ps1 reads (other settings there are kept).
+if ($gpus.Count -gt 1) {
+    $gs = Join-Path $Root "data\gpu-settings.json"
+    $cfg = if (Test-Path $gs) { Get-Content -Raw $gs | ConvertFrom-Json } else { [pscustomobject]@{} }
+    $cfg | Add-Member -NotePropertyName mode -NotePropertyValue $GpuMode -Force
+    [IO.File]::WriteAllText($gs, ($cfg | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
+    Ok "GPU mode $GpuMode saved to data\gpu-settings.json"
 }
 
 # ---------- 6. llama.cpp ----------
@@ -342,10 +389,10 @@ foreach ($n in @(@{ Name = "ComfyUI-GGUF"; Url = "https://github.com/leejet/Comf
 Step 9 "Models"
 $gguf = Join-Path $Root "models\gguf"
 $comfyModels = Join-Path $Root "models\comfy"
-$ollamaPacks = @{ fast = "hf.co/LEONW24/Qwen3.5-9B-Uncensored:Q4_K_M"; vision = "gemma4:12b" }
-$pulls = @($Packs | Where-Object { $ollamaPacks.ContainsKey($_) } | ForEach-Object { $ollamaPacks[$_] })
+$pulls = @($Packs | Where-Object { $OllamaPicks.ContainsKey($_) } | ForEach-Object { $OllamaPicks[$_] })
 # Prestige's Live calls: small vision models that fit on the GPU beside Whisper (and the 2B beside VoxCPM2).
 if ($Packs -contains "voice") { $pulls += @("qwen3.5:2b", "qwen3.5:4b") }
+$pulls = @($pulls | Select-Object -Unique)
 if ($pulls) {
     # Pull into the workstation's own model store, using a temporary Ollama server pointed at it.
     $env:OLLAMA_MODELS = Join-Path $Root "models\ollama"
@@ -439,6 +486,8 @@ if (-not $NoTest) {
     $deadline = (Get-Date).AddMinutes(4)
     do { Start-Sleep 3; $missing = @($checks.Keys | Where-Object { -not (& $up $checks[$_]) }) } while ($missing -and (Get-Date) -lt $deadline)
     foreach ($k in $checks.Keys) { if (& $up $checks[$k]) { Ok "$k (:$($checks[$k]))" } else { Warn "$k didn't start; see $Root\logs" } }
+    . (Join-Path $Root "scripts\gpu-config.ps1")
+    Say (Format-GpuPlan (Get-GpuPlan $Root))
     & (Join-Path $Root "stop-all.ps1") | Out-Null
     Ok "stopped again"
 }
