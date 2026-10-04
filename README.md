@@ -70,6 +70,7 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | 🖱️ | **Computer use** | UI-TARS Desktop driven by a local UI-TARS-1.5-7B |
 | 🖼️ | **Images** | Qwen-Image-2.1 (good with text, signs and posters), its 4-step turbo, or Z-Image-Turbo through ComfyUI, from the image button or by asking |
 | ✏️ | **Image editing** | Qwen-Image-2.1 by instruction ("make it night", "swap the car for a horse"), with an optional reference image or mask |
+| 🧍 | **Reference images** | In Prestige: put a character or item from your own picture into a new image (Qwen-Image-2.1) or video (that image, or the picture itself, animated by LTX-2.5 with sound) |
 | 🎬 | **Video** | LTX-2.5 text-to-video with audio, Wan 2.2 image-to-video, as background jobs |
 | 🗂️ | **Shared long-term memory** | every model reads and writes the same memory; chats are saved |
 
@@ -111,6 +112,8 @@ The 12 GB GPU holds one big model at a time. Everything unloads when idle, so ch
 | Images | Qwen-Image-2.1 Q4_K_M (uncensored), 20 steps, Qwen3-VL-8B text encoder | ComfyUI + GGUF | ~11.6 GB | ~80 s at 1024² (~110 s cold); peak 6–8 GB VRAM |
 | Images, fast | Qwen-Image-2.1 Viggle 4-step turbo Q4_K_M | ComfyUI + GGUF | +4.2 GB | ~25 s at 1024² |
 | Image editing | Qwen-Image-2.1 (same files) | ComfyUI + GGUF | — | ~2 min at 1024²; peak 8.3 GB VRAM |
+| Reference image → new scene | Qwen-Image-2.1 or its turbo (same files) | ComfyUI + GGUF | — | ~2 min at 1024² (~2.2 min cold) |
+| Image → video + audio | LTX-2.5 (same files), the picture as the first frame | ComfyUI + GGUF | — | ~4–11 min for 4 s at 768×512 (longer when the models load from disk; +2–3.5 min when Qwen-Image makes the first frame) |
 | Images (alternative) | Z-Image-Turbo | ComfyUI | 21 GB | ~35–40 s at 1024² |
 | Text → video + audio | LTX-2.5 22B distilled Q4_K_M, two-stage with the x2 latent upscaler | ComfyUI + GGUF | ~34 GB | ~3.5 min for 4 s at 768×512 from an NVMe drive (~9.5 min from an HDD); peak 11.9 GB VRAM |
 | Image → video | Wan 2.2 I2V A14B LightX2V 4-step Q4_K_M | ComfyUI + GGUF | ~25 GB | ~10 min for 5 s |
@@ -142,8 +145,8 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `main` | Qwen3.6 35B-A3B Heretic + vision (llama.cpp, needs 32 GB RAM) | 22 GB |
 | `deep` | Qwen3.8 27B Uncensored + vision (llama.cpp), the strongest reasoner, fully on a 12 GB GPU | 11 GB |
 | `voice` | Whisper large-v3-turbo speech-to-text and VoxCPM2 voices on the GPU (needs 8 GB+ VRAM), plus Qwen3.5 2B and 4B for Prestige's Live calls; without it, Open WebUI's CPU Whisper `base` is used | 18 GB |
-| `images` | Qwen-Image-2.1 text-to-image and editing, its 4-step turbo (ComfyUI GGUF), and Z-Image-Turbo | 37 GB |
-| `video` | Wan 2.2 image-to-video and LTX-2.5 text-to-video (ComfyUI GGUF) | 60 GB |
+| `images` | Qwen-Image-2.1 text-to-image, editing and reference images, its 4-step turbo (ComfyUI GGUF), and Z-Image-Turbo | 37 GB |
+| `video` | Wan 2.2 image-to-video and LTX-2.5 text- and image-to-video (ComfyUI GGUF) | 60 GB |
 | `computer` | UI-TARS 1.5 7B (llama.cpp) | 7 GB |
 
 Along the way it installs the Visual C++ runtime, git, uv, Node.js, ffmpeg, Ollama and eSpeak NG with winget (and
@@ -238,7 +241,7 @@ requirements/*.txt           pinned Python packages for the installer
 tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot, images, image edits, video jobs
 tools/voice_server.py        voice server: Whisper turbo speech-to-text, VoxCPM2 speech and voice cloning
 tools/mcpo-config.json       MCP servers exposed to Open WebUI through mcpo
-workflows/*.api.json         ComfyUI API workflows (Qwen-Image-2.1 and its edit, Z-Image-Turbo, LTX-2.5, LTX-2.3, Wan 2.2)
+workflows/*.api.json         ComfyUI API workflows (Qwen-Image-2.1, its edit and reference-image graphs, Z-Image-Turbo, LTX-2.5 and LTX-2.3 text- and image-to-video, Wan 2.2)
 scripts/                     video model downloader, ComfyUI workflow runner, release packager, Open WebUI voice setup
 theme/custom.css · loader.js  Open WebUI themes and the theme switcher
 docs/assets/                 README art and samples
