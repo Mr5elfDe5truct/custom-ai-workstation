@@ -4,6 +4,7 @@ Run through mcpo (see tools/mcpo-config.json); each function becomes a tool in O
 """
 import base64
 import datetime as dt
+import json
 from pathlib import Path
 
 import httpx
@@ -168,20 +169,32 @@ def _upload(image_path: str) -> str:
     return up.json()["name"]
 
 
-def _free_gpu():
-    # ComfyUI needs the 12 GB card to itself; sharing it with a chat model makes renders ~3x slower.
-    # Unload Ollama's and llama.cpp's models (the chat model reloads for its next reply), and the voice server's.
+def _shares_comfy_card(other: str) -> bool:
+    # data/runtime/gpu.json (start-all.ps1) says which cards each service runs on; with one card everything shares it.
     try:
-        httpx.post("http://127.0.0.1:8890/v1/audio/unload", json={}, timeout=30)
+        s = json.loads((ROOT / "data" / "runtime" / "gpu.json").read_text(encoding="utf-8")).get("services") or {}
+    except (OSError, ValueError):
+        return True
+    mine, theirs = set(s.get("comfyui") or []), set(s.get(other) or [])
+    return not mine or not theirs or bool(mine & theirs)
+
+
+def _free_gpu():
+    # ComfyUI needs its card to itself; sharing it with a chat model makes renders ~3x slower.
+    # Unload Ollama's and llama.cpp's models (the chat model reloads for its next reply), and the voice server's,
+    # when they're on ComfyUI's card (with several GPUs they may be on another).
+    try:
+        if _shares_comfy_card("voice"):
+            httpx.post("http://127.0.0.1:8890/v1/audio/unload", json={}, timeout=30)
     except httpx.HTTPError:
         pass
     try:
-        for m in httpx.get("http://127.0.0.1:11434/api/ps", timeout=10).json().get("models", []):
+        for m in httpx.get("http://127.0.0.1:11434/api/ps", timeout=10).json().get("models", []) if _shares_comfy_card("ollama") else []:
             httpx.post("http://127.0.0.1:11434/api/generate", json={"model": m["name"], "keep_alive": 0}, timeout=30)
     except httpx.HTTPError:
         pass
     try:
-        for m in httpx.get("http://127.0.0.1:8081/models", timeout=10).json().get("data", []):
+        for m in httpx.get("http://127.0.0.1:8081/models", timeout=10).json().get("data", []) if _shares_comfy_card("llama") else []:
             if m.get("status", {}).get("value") in ("loaded", "loading"):
                 httpx.post("http://127.0.0.1:8081/models/unload", json={"model": m["id"]}, timeout=30)
     except httpx.HTTPError:

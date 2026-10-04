@@ -17,6 +17,7 @@ Run: envs\\voice\\Scripts\\python.exe tools\\voice_server.py   (port 8890; start
 """
 import asyncio
 import io
+import json
 import os
 import queue
 import re
@@ -66,11 +67,25 @@ state = {"whisper": None, "whisper_device": None, "whisper_used": 0.0, "tts": No
 prompt_cache: dict = {}  # voice -> (clip mtime, VoxCPM2 prompt cache): a clip is encoded once, not every sentence
 
 
+def _shares_card(other: str) -> bool:
+    # data/runtime/gpu.json (start-all.ps1) says which cards each service runs on. With one card, or no plan, everything
+    # shares it; with several, a chat model on another card doesn't need to make room for the voices.
+    try:
+        s = json.loads((ROOT / "data" / "runtime" / "gpu.json").read_text(encoding="utf-8")).get("services") or {}
+    except (OSError, ValueError):
+        return True
+    mine, theirs = set(s.get("voice") or []), set(s.get(other) or [])
+    return not mine or not theirs or bool(mine & theirs)
+
+
 def _free_vram() -> int:
     # nvidia-smi, not torch.cuda.mem_get_info(): on Windows the driver lets CUDA spill into system RAM, so torch can
     # report gigabytes free on a full card, and a model loaded there runs several times slower.
+    # start-all.ps1 pins this server to a card by UUID when the PC has several; ask nvidia-smi about that one.
+    gpu = os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")[0].strip()
     try:
-        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.total,memory.used", "--format=csv,noheader,nounits"],
+        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.total,memory.used", "--format=csv,noheader,nounits"]
+                             + (["-i", gpu] if gpu.startswith("GPU-") else []),
                              capture_output=True, text=True, timeout=10).stdout.splitlines()[0]
         total, used = (int(x) for x in out.split(","))
         return (total - used) * 1024 * 1024
@@ -81,12 +96,12 @@ def _free_vram() -> int:
 def _free_chat_models():
     # Same as the tool server does for renders: unload Ollama's and llama.cpp's models (they reload on the next reply).
     try:
-        for m in httpx.get("http://127.0.0.1:11434/api/ps", timeout=5).json().get("models", []):
+        for m in httpx.get("http://127.0.0.1:11434/api/ps", timeout=5).json().get("models", []) if _shares_card("ollama") else []:
             httpx.post("http://127.0.0.1:11434/api/generate", json={"model": m["name"], "keep_alive": 0}, timeout=30)
     except httpx.HTTPError:
         pass
     try:
-        for m in httpx.get("http://127.0.0.1:8081/models", timeout=5).json().get("data", []):
+        for m in httpx.get("http://127.0.0.1:8081/models", timeout=5).json().get("data", []) if _shares_card("llama") else []:
             if m.get("status", {}).get("value") in ("loaded", "loading"):
                 httpx.post("http://127.0.0.1:8081/models/unload", json={"model": m["id"]}, timeout=30)
     except httpx.HTTPError:
