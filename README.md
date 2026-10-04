@@ -117,6 +117,7 @@ The 12 GB GPU holds one big model at a time. Everything unloads when idle, so ch
 | Images (alternative) | Z-Image-Turbo | ComfyUI | 21 GB | ~35–40 s at 1024² |
 | Text → video + audio | LTX-2.5 22B distilled Q4_K_M, two-stage with the x2 latent upscaler | ComfyUI + GGUF | ~34 GB | ~3.5 min for 4 s at 768×512 from an NVMe drive (~9.5 min from an HDD); peak 11.9 GB VRAM |
 | Image → video | Wan 2.2 I2V A14B LightX2V 4-step Q4_K_M | ComfyUI + GGUF | ~25 GB | ~10 min for 5 s |
+| Long video (image → up to 4 chained shots) | Wan 2.2 I2V + Stable Video Infinity v2 PRO LoRAs (KJNodes, LayerStyle, Fill-Nodes, ReservedVRAM, Memory_Cleanup, essentials_mb, Easy-Use custom nodes) | ComfyUI | +2.5 GB of LoRAs | ~7 min for 4 shots of 49 frames at 480² |
 | Speech to text | Whisper large-v3-turbo (int8) | voice server (faster-whisper) | 1.6 GB | ~0.1–0.7 s a sentence on the GPU (~25 s on the CPU, so the CPU fallback is `base`) |
 | Text to speech | Kokoro 82M | Kokoro-FastAPI | small | CPU, real time |
 | Expressive speech | VoxCPM2 2B: designed voices, cloning from a short clip, 48 kHz | voice server | 5 GB | ~1.2× real time (first sound ~0.3 s when streamed); 6 GB VRAM, so chat models unload while it speaks (except the small Live model) |
@@ -241,7 +242,7 @@ requirements/*.txt           pinned Python packages for the installer
 tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot, images, image edits, video jobs
 tools/voice_server.py        voice server: Whisper turbo speech-to-text, VoxCPM2 speech and voice cloning
 tools/mcpo-config.json       MCP servers exposed to Open WebUI through mcpo
-workflows/*.api.json         ComfyUI API workflows (Qwen-Image-2.1, its edit and reference-image graphs, Z-Image-Turbo, LTX-2.5 and LTX-2.3 text- and image-to-video, Wan 2.2)
+workflows/*.api.json         ComfyUI API workflows (Qwen-Image-2.1, its edit and reference-image graphs, Z-Image-Turbo, LTX-2.5 and LTX-2.3 text- and image-to-video, Wan 2.2, and Wan 2.2 SVI long video)
 scripts/                     video model downloader, ComfyUI workflow runner, release packager, Open WebUI voice setup
 theme/custom.css · loader.js  Open WebUI themes and the theme switcher
 docs/assets/                 README art and samples
