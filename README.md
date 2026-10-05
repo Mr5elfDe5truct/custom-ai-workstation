@@ -117,7 +117,7 @@ chat keeps going while a render runs. Small cards get smaller models and context
 | Reference image → new scene | Qwen-Image-2.1 or its turbo (same files) | ComfyUI + GGUF | — | ~2 min at 1024² (~2.2 min cold) |
 | Image → video + audio | LTX-2.5 (same files), the picture as the first frame | ComfyUI + GGUF | — | ~4–11 min for 4 s at 768×512 (longer when the models load from disk; +2–3.5 min when Qwen-Image makes the first frame) |
 | Images (alternative) | Z-Image-Turbo | ComfyUI | 21 GB | ~35–40 s at 1024² |
-| Text → video + audio | LTX-2.5 22B distilled Q4_K_M, two-stage with the x2 latent upscaler | ComfyUI + GGUF | ~34 GB | ~3.5 min for 4 s at 768×512 from an NVMe drive (~9.5 min from an HDD); peak 11.9 GB VRAM |
+| Text → video + audio | LTX-2.5 22B distilled Q4_K_M, two-stage with the x2 latent upscaler | ComfyUI + GGUF | ~34 GB | ~3.5 min for 4 s at 768×512 from an NVMe drive (~9.5 min from an HDD); 5 s ~3.8 min, 10 s ~5.4 min, 1280×704 10 s ~10 min, all within 12 GB (part of the model streams from RAM) |
 | Image → video | Wan 2.2 I2V A14B LightX2V 4-step Q4_K_M | ComfyUI + GGUF | ~25 GB | ~10 min for 5 s |
 | Long video (image → up to 4 chained shots) | Wan 2.2 I2V + Stable Video Infinity v2 PRO LoRAs (KJNodes, LayerStyle, Fill-Nodes, ReservedVRAM, Memory_Cleanup, essentials_mb, Easy-Use custom nodes) | ComfyUI | +2.5 GB of LoRAs | ~7 min for 4 shots of 49 frames at 480² |
 | Speech to text | Whisper large-v3-turbo (int8) | voice server (faster-whisper) | 1.6 GB | ~0.1–0.7 s a sentence on the GPU (~25 s on the CPU, so the CPU fallback is `base`) |
@@ -134,6 +134,8 @@ chat keeps going while a render runs. Small cards get smaller models and context
 | `split` | **default with two or more cards**: Ollama and Open WebUI's embeddings on the second card, llama.cpp and ComfyUI on the biggest; the voice server joins the small card when it has 8 GB or more |
 | `pool` | like split, but llama.cpp spreads the big model over every card |
 
+With `"services": { "comfyui": "all" }`, ComfyUI also uses a second card for the parts that can move (the LTX
+upscaler; VAEs and text encoders on request), while the diffusion model stays on the big card.
 On cards other than 12 GB, llama.cpp sizes its offload to the card itself (`--fit`), Ollama's context drops to
 16k (8k under 5.5 GB), and the installer picks Ollama models that fit the card they'll run on. Switch with
 `.\start-all.ps1 -GpuMode pool`, or for good in `data\gpu-settings.json`. [docs/GPUS.md](docs/GPUS.md) has the details,
@@ -257,6 +259,7 @@ open-app.ps1 · install-shortcut.ps1                     Open WebUI app window a
 install.ps1 · setup.cmd       installer (setup.cmd runs install.ps1)
 bin/llama-models.ini         llama.cpp router presets (Qwen3.6, Qwen3.8, UI-TARS)
 scripts/gpu-config.ps1       which GPU each service runs on, and what fits on it (docs/GPUS.md)
+tools/comfy_nodes/           the Workstation's ComfyUI node: upscaler / VAE / text encoder on a second card
 requirements/*.txt           pinned Python packages for the installer
 tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot, images, image edits, video jobs
 tools/voice_server.py        voice server: Whisper turbo speech-to-text, VoxCPM2 speech and voice cloning
