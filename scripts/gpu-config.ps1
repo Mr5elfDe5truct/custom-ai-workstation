@@ -121,9 +121,20 @@ function Get-GpuPlan($Root, [string]$Mode = "") {
         if ($fitOn) { $notes += "tensorSplit is set, so llama.cpp uses the ini's offload settings instead of --fit"; $fitOn = $false }
     }
 
+    # ComfyUI on two or more cards: the diffusion model and its latents stay on the first (big) one, and the VAEs and
+    # LTX upscaler load on the second (tools\comfy_nodes\workstation_gpus). VRAM doesn't pool for one model, but these
+    # parts can move. Text encoders stay on the big card by default: they run before the diffusion model loads, so they
+    # don't add to its peak, and ComfyUI's dynamic VRAM ran out of memory streaming LTX-2.5's 15 GB Gemma encoder onto a
+    # 6 GB second card. comfyAux: "auto" (vae,upscaler), "off", or a list such as "text_encoder,vae,upscaler".
+    $aux = "$(Get-Setting $s "comfyAux")".ToLower() -replace "\s", ""
+    $comfyAux = $null
+    if ($svc.comfyui.Count -gt 1 -and $aux -notin "off", "false", "none") {
+        $comfyAux = if ($aux -in "auto", "on", "true") { "upscaler" } else { $aux }
+    }
+
     [pscustomobject]@{
         Mode = $Mode; Gpus = $gpus; Big = $big; Small = $small; Services = $svc; Notes = $notes
-        OllamaContext = $ctx; LlamaFit = $fitOn; TensorSplit = $split; LlamaGB = $llamaGB
+        OllamaContext = $ctx; LlamaFit = $fitOn; TensorSplit = $split; LlamaGB = $llamaGB; ComfyAux = $comfyAux
         # Several cards in the PC (even with some excluded): services get pinned.
         Multi = $all.Count -gt 1
     }
@@ -138,6 +149,11 @@ function Set-ServiceGpus($Plan, $Service) {
     # Ollama also finds the cards through Vulkan, which CUDA_VISIBLE_DEVICES doesn't hide: it would load onto the
     # other card that way, at a fraction of the speed. The cards are NVIDIA, so CUDA alone is right.
     if ($Service -eq "ollama") { $env:OLLAMA_VULKAN = "0" }
+    # ComfyUI with a second card: its index in CUDA_VISIBLE_DEVICES (the big card is 0) for the workstation_gpus node.
+    if ($Service -eq "comfyui") {
+        if ($Plan.ComfyAux) { $env:WORKSTATION_COMFY_AUX_DEVICE = "1"; $env:WORKSTATION_COMFY_AUX_PARTS = $Plan.ComfyAux }
+        else { Remove-Item Env:WORKSTATION_COMFY_AUX_DEVICE, Env:WORKSTATION_COMFY_AUX_PARTS -ErrorAction SilentlyContinue }
+    }
 }
 
 # The runtime copy of bin\llama-models.ini for this plan (the tuned values stay as they are on a 12 GB card).
@@ -157,12 +173,14 @@ function Convert-LlamaIni($Text, $Plan) {
 
 # data\runtime\gpu.json, for Prestige (meters per card, fit warnings against the right card) and the voice server.
 function Save-GpuPlan($Plan, $Path) {
-    $o = [ordered]@{ mode = "none"; gpus = @(); services = [ordered]@{}; ollamaContext = 32768; llamaFit = $false; tensorSplit = $null }
+    $o = [ordered]@{ mode = "none"; gpus = @(); services = [ordered]@{}; ollamaContext = 32768; llamaFit = $false; tensorSplit = $null; comfyAux = @() }
     if ($Plan) {
         $o.mode = $Plan.Mode
         $o.gpus = @($Plan.Gpus | ForEach-Object { [ordered]@{ index = $_.Index; uuid = $_.Uuid; name = $_.Name; gb = $_.GB } })
         foreach ($k in $Plan.Services.Keys) { $o.services[$k] = @($Plan.Services[$k] | ForEach-Object Index) }
         $o.ollamaContext = $Plan.OllamaContext; $o.llamaFit = $Plan.LlamaFit; $o.tensorSplit = $Plan.TensorSplit
+        # What ComfyUI loads on its second card (comfyui's second index), for Prestige's per-card estimates.
+        $o.comfyAux = @(if ($Plan.ComfyAux) { $Plan.ComfyAux -split "," })
     }
     [IO.File]::WriteAllText($Path, ($o | ConvertTo-Json -Depth 5), (New-Object Text.UTF8Encoding $false))
 }
@@ -179,6 +197,11 @@ function Format-GpuPlan($Plan) {
              elseif ($Plan.LlamaFit -and $n -gt 1) { "pooled over $n cards by --fit" }
              elseif ($Plan.LlamaFit) { "sized to the card by --fit" } else { "12 GB presets" }
     $out += "    Ollama context $([math]::Round($Plan.OllamaContext / 1024))k; llama.cpp $llama"
+    if ($Plan.ComfyAux) {
+        $c = $Plan.Services.comfyui
+        $parts = ($Plan.ComfyAux -split "," | ForEach-Object { @{ text_encoder = "text encoders"; vae = "VAEs"; upscaler = "LTX upscaler" }[$_] }) -join ", "
+        $out += "    ComfyUI: diffusion model on the $($c[0].Name); $parts on the $($c[1].Name)"
+    }
     foreach ($n in $Plan.Notes) { $out += "    ! $n" }
     $out -join "`n"
 }

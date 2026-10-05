@@ -27,10 +27,20 @@ function Expand-Template($src, $dst, [switch]$Json) {
 # Which GPU each service runs on (scripts\gpu-config.ps1), saved for Prestige and the voice and tool servers.
 . "$Root\scripts\gpu-config.ps1"
 $GpuPlan = Get-GpuPlan $Root $GpuMode
-$services = { if (Test-Path "$Runtime\gpu.json") { (Get-Content -Raw "$Runtime\gpu.json" | ConvertFrom-Json).services | ConvertTo-Json -Compress } }
-$before = & $services
+# Each service's cards (and ComfyUI's second-card parts), as start-all.ps1 last saved them.
+$placement = {
+    if (-not (Test-Path "$Runtime\gpu.json")) { return @{} }
+    $j = Get-Content -Raw "$Runtime\gpu.json" | ConvertFrom-Json
+    $p = @{}
+    foreach ($s in $j.services.PSObject.Properties) { $p[$s.Name] = @($s.Value) -join "," }
+    if ($p.comfyui) { $p.comfyui += "|" + (@($j.comfyAux) -join ",") }
+    $p
+}
+$before = & $placement
 Save-GpuPlan $GpuPlan "$Runtime\gpu.json"
-$GpuMoved = $before -and $before -ne (& $services)   # a service that's already running stays on its old card
+$after = & $placement
+# Services whose cards changed: one that's already running stays on its old card until it restarts.
+$GpuMoved = @(if ($before.Count) { $after.Keys | Where-Object { $before[$_] -ne $after[$_] } })
 Expand-Template "$Root\bin\llama-models.ini" "$Runtime\llama-models.ini"
 # On anything but one 12 GB card, the ini's hand-tuned offload settings give way to llama.cpp's --fit.
 [IO.File]::WriteAllText("$Runtime\llama-models.ini", (Convert-LlamaIni (Get-Content -Raw "$Runtime\llama-models.ini") $GpuPlan),
@@ -103,7 +113,7 @@ function Test-Port($port) {
 # $gpuService: the service in the GPU plan whose cards this process may use (none: it doesn't use the GPU).
 function Start-Bg($name, $port, $exe, $argList, $workDir = $Root, $gpuService = $null) {
     if (Test-Port $port) {
-        $where = if ($gpuService -and $GpuMoved) { "; it stays on the GPU it started on (stop-all.ps1 and start again to move it)" } else { "" }
+        $where = if ($gpuService -and $GpuMoved -contains $gpuService) { "; it stays on the GPU it started on (stop-all.ps1 and start again to move it)" } else { "" }
         Write-Host "  $name already running (port $port)$where"; return
     }
     if ($gpuService) { Set-ServiceGpus $GpuPlan $gpuService } else { Remove-Item Env:CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue }
@@ -162,10 +172,14 @@ Start-Bg "mcpo" 8200 "$Root\envs\tools\Scripts\mcpo.exe" `
 # 5. ComfyUI (images + video), headless, using Comfy Desktop's install and both model folders.
 #    --disable-smart-memory moves models off the GPU after each job so the chat models can use it.
 if (-not $NoComfy -and $ComfyDir) {
+    # The Workstation's own node: with two cards for ComfyUI, text encoders, VAEs and the LTX upscaler go on the second
+    # (it does nothing otherwise). Copied on every start so it follows this folder's version.
+    Copy-Item "$Root\tools\comfy_nodes\workstation_gpus" "$ComfyDir\custom_nodes" -Recurse -Force
     Start-Bg "comfyui" 8188 $ComfyPython @(
         "main.py", "--listen", "127.0.0.1", "--port", "8188", "--disable-smart-memory",
         "--extra-model-paths-config", "`"$Runtime\comfy-extra-models.yaml`"",
         "--output-directory", "`"$Root\data\comfy-output`"") $ComfyDir "comfyui"
+    Remove-Item Env:WORKSTATION_COMFY_AUX_DEVICE, Env:WORKSTATION_COMFY_AUX_PARTS -ErrorAction SilentlyContinue
 } elseif (-not $NoComfy) {
     Write-Host "  ComfyUI isn't installed (run install.ps1), so images and video are off"
 }
