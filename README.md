@@ -7,6 +7,7 @@
   <img alt="Windows 11" src="https://img.shields.io/badge/Windows%2011-native-0078D4?style=for-the-badge&logo=windows11&logoColor=white">
   <img alt="RTX 3060 12 GB" src="https://img.shields.io/badge/GPU-RTX%203060%2012%20GB-76B900?style=for-the-badge&logo=nvidia&logoColor=white">
   <img alt="100% local" src="https://img.shields.io/badge/cloud-none-f472b6?style=for-the-badge">
+  <a href="https://github.com/sponsors/Mr5elfDe5truct"><img alt="Sponsor" src="https://img.shields.io/badge/sponsor-%E2%9D%A4-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white"></a>
   <br>
   <img alt="Open WebUI" src="https://img.shields.io/badge/Open%20WebUI-chat-1e1b4b?style=flat-square">
   <img alt="llama.cpp" src="https://img.shields.io/badge/llama.cpp-router-0f172a?style=flat-square">
@@ -285,6 +286,12 @@ PLAN.md                      design notes, component choices and sources
 ```
 
 Model weights, virtual envs, apps, chats, memory, logs and generated media stay on the PC and are git-ignored.
+
+## 💖 Support
+
+Custom AI Workstation is free and always will be. If it saves you a subscription, you can help keep it going on
+[GitHub Sponsors](https://github.com/sponsors/Mr5elfDe5truct). Every sponsor helps fund new features, more models and
+Linux and macOS support.
 
 ## 🙏 Credits
 

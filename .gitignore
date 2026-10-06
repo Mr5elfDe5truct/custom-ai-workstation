@@ -12,6 +12,7 @@
 !/setup.cmd
 !/theme/
 !/docs/
+!/.github/
 !/bin/
 /bin/*
 !/bin/*.ini
