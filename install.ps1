@@ -392,6 +392,8 @@ $comfyModels = Join-Path $Root "models\comfy"
 $pulls = @($Packs | Where-Object { $OllamaPicks.ContainsKey($_) } | ForEach-Object { $OllamaPicks[$_] })
 # Prestige's Live calls: small vision models that fit on the GPU beside Whisper (and the 2B beside VoxCPM2).
 if ($Packs -contains "voice") { $pulls += @("qwen3.5:2b", "qwen3.5:4b") }
+# Prestige's Knowledge (chat with your files): a small embedding model (0.6 GB) that reads documents on this PC.
+if ($Packs) { $pulls += "qwen3-embedding:0.6b" }
 $pulls = @($pulls | Select-Object -Unique)
 if ($pulls) {
     # Pull into the workstation's own model store, using a temporary Ollama server pointed at it.
