@@ -73,12 +73,14 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | 🧍 | **Reference images** | In Prestige: put a character or item from your own picture into a new image (Qwen-Image-2.1) or video (that image, or the picture itself, animated by LTX-2.5 with sound) |
 | 🎬 | **Video** | LTX-2.5 text-to-video with audio, Wan 2.2 image-to-video, as background jobs |
 | 🗂️ | **Shared long-term memory** | every model reads and writes the same memory; chats are saved |
+| 📚 | **Chat with your files** (Prestige) | Drop PDFs, Word documents, notes or a folder into a chat; Qwen3-Embedding 0.6B (Ollama) indexes them on this PC and answers cite the file and page |
 
 ## 🎩 Prestige desktop app
 
 **[Prestige by R.G. Studios](https://github.com/Mr5elfDe5truct/prestige)** is a native Windows app for this stack, an alternative to the
 Open WebUI window. It has streaming chat with every model, shared memory, a System dashboard with model load and unload, a Studio gallery
-with image and video generation, voice conversation with an animated avatar, Live voice and webcam calls, and webcam vision. Opening it starts the stack, and closing it
+with image and video generation, voice conversation with an animated avatar, Live voice and webcam calls, webcam vision, and chat with your
+own files (answers cite the file and page). Opening it starts the stack, and closing it
 stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe5truct/prestige/releases) page.
 
 ## 🏗️ How it fits together
@@ -88,7 +90,7 @@ stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe
 | Port | Service | Notes |
 |---|---|---|
 | 8080 | Open WebUI | the app you use |
-| 11434 | Ollama | Gemma 4, Qwen3.5 9B, Qwen3.5 2B / 4B (Prestige Live calls), coders; unloads after 5 min idle |
+| 11434 | Ollama | Gemma 4, Qwen3.5 9B, Qwen3.5 2B / 4B (Prestige Live calls), Qwen3-Embedding 0.6B (Prestige Knowledge), coders; unloads after 5 min idle |
 | 8081 | llama.cpp router | Qwen3.6 35B, Qwen3.8 27B and UI-TARS, one at a time; unloads after 3 min idle (`bin/llama-models.ini`) |
 | 8188 | ComfyUI (headless) | its own install, or Comfy Desktop's; frees the GPU after each job |
 | 8880 | Kokoro | text-to-speech on CPU |
@@ -110,6 +112,7 @@ chat keeps going while a render runs. Small cards get smaller models and context
 | Fast, fully on GPU, uncensored | Qwen3.5-9B Uncensored Q4_K_M | Ollama | 6.7 GB | fast |
 | Vision / webcam | Gemma 4 (12B and e4b) | Ollama | 7–10 GB | good |
 | Live calls (Prestige) | Qwen3.5 4B with Kokoro voices, Qwen3.5 2B beside VoxCPM2 (vision, no thinking, 16k context) | Ollama | 3.4 / 2.7 GB | ~55 / ~60 tok/s; 3.3 / 2.4 GB VRAM |
+| Reading your files (Prestige Knowledge) | Qwen3-Embedding 0.6B | Ollama | 0.6 GB | ~1 GB VRAM while it reads |
 | Computer use | UI-TARS-1.5-7B Q5_K_M | llama.cpp | ~5.5 GB | on demand |
 | Images | Qwen-Image-2.1 Q4_K_M (uncensored), 20 steps, Qwen3-VL-8B text encoder | ComfyUI + GGUF | ~11.6 GB | ~80 s at 1024² (~110 s cold); peak 6–8 GB VRAM |
 | Images, fast | Qwen-Image-2.1 Viggle 4-step turbo Q4_K_M | ComfyUI + GGUF | +4.2 GB | ~25 s at 1024² |
@@ -168,6 +171,8 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `images` | Qwen-Image-2.1 text-to-image, editing and reference images, its 4-step turbo (ComfyUI GGUF), and Z-Image-Turbo | 37 GB |
 | `video` | Wan 2.2 image-to-video and LTX-2.5 text- and image-to-video (ComfyUI GGUF) | 60 GB |
 | `computer` | UI-TARS 1.5 7B (llama.cpp) | 7 GB |
+
+With any pack it also gets Qwen3-Embedding 0.6B (0.6 GB), which Prestige's Knowledge uses to read your files.
 
 Along the way it installs the Visual C++ runtime, git, uv, Node.js, ffmpeg, Ollama and eSpeak NG with winget (and
 winget itself if Windows doesn't have it); the newest llama.cpp CUDA build;
