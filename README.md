@@ -171,7 +171,7 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `voice` | Whisper large-v3-turbo speech-to-text and VoxCPM2 voices on the GPU (needs 8 GB+ VRAM), plus Qwen3.5 2B and 4B for Prestige's Live calls; without it, Open WebUI's CPU Whisper `base` is used | 18 GB |
 | `images` | Qwen-Image-2.1 text-to-image, editing and reference images, its 4-step turbo (ComfyUI GGUF), and Z-Image-Turbo | 37 GB |
 | `video` | Wan 2.2 image-to-video and LTX-2.5 text- and image-to-video (ComfyUI GGUF) | 60 GB |
-| `computer` | UI-TARS 1.5 7B (llama.cpp) | 7 GB |
+| `computer` | UI-TARS 1.5 7B (llama.cpp); it then asks about Nex-N2.5-mini (+21.6 GB, 32 GB RAM; or `-Nex`), the model Prestige's Do it for me prefers | 7 GB |
 
 With any pack it also gets Qwen3-Embedding 0.6B (0.6 GB), which Prestige's Knowledge uses to read your files.
 
