@@ -45,7 +45,9 @@ Expand-Template "$Root\bin\llama-models.ini" "$Runtime\llama-models.ini"
 # On anything but one 12 GB card, the ini's hand-tuned offload settings give way to llama.cpp's --fit.
 [IO.File]::WriteAllText("$Runtime\llama-models.ini", (Convert-LlamaIni (Get-Content -Raw "$Runtime\llama-models.ini") $GpuPlan),
     (New-Object Text.UTF8Encoding $false))
-Expand-Template "$Root\tools\mcpo-config.json" "$Runtime\mcpo-config.json" -Json
+# The tool server's config, with any tools added from Prestige's tool store (scripts\tool-config.ps1).
+. "$Root\scripts\tool-config.ps1"
+Write-ToolConfig $Root $Runtime
 
 # ComfyUI: the one install.ps1 puts in apps\ComfyUI, or else an existing Comfy Desktop install.
 $ComfyDir = $null; $ComfyPython = $null
@@ -165,9 +167,9 @@ if ($Voice) {
     Start-Bg "voice" 8890 "$Root\envs\voice\Scripts\python.exe" "`"$Root\tools\voice_server.py`"" $Root "voice"
 }
 
-# 4. Tool server: research scout, webcam, video jobs, web fetch, files, shell (Desktop Commander), browser (Playwright).
-Start-Bg "mcpo" 8200 "$Root\envs\tools\Scripts\mcpo.exe" `
-    "--host 127.0.0.1 --port 8200 --config `"$Runtime\mcpo-config.json`""
+# 4. Tool server: research scout, webcam, video jobs, web fetch, files, shell (Desktop Commander), browser (Playwright),
+#    plus tools added from Prestige's tool store. --hot-reload picks up added and removed tools while it runs.
+Start-Bg "mcpo" 8200 "$Root\envs\tools\Scripts\mcpo.exe" (Get-McpoArgs $Runtime)
 
 # 5. ComfyUI (images + video), headless, using Comfy Desktop's install and both model folders.
 #    --disable-smart-memory moves models off the GPU after each job so the chat models can use it.
