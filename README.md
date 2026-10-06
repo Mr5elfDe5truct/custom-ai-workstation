@@ -95,7 +95,7 @@ stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe
 | 8188 | ComfyUI (headless) | its own install, or Comfy Desktop's; frees the GPU after each job |
 | 8880 | Kokoro | text-to-speech on CPU |
 | 8890 | voice server | Whisper large-v3-turbo speech-to-text and VoxCPM2 voices, OpenAI-compatible, on the GPU when used; streams VoxCPM2 speech as raw PCM (`"stream": true`) and preloads both for Live calls (`/v1/audio/load`) (`tools/voice_server.py`) |
-| 8200 | mcpo tool server | research, webcam, fetch, images, image edits, video jobs, files, shell, browser (`tools/mcpo-config.json`) |
+| 8200 | mcpo tool server | research, webcam, fetch, images, image edits, video jobs, files, shell, browser (`tools/mcpo-config.json`), plus tools added from Prestige's tool store (`data\mcpo-extra.json`), reloaded while it runs |
 
 The 12 GB GPU holds one big model at a time. Everything unloads when idle, so chat, images and video take turns.
 With two or more NVIDIA cards, the small models (Ollama) run on one card and the big model and ComfyUI on another, so
@@ -255,6 +255,12 @@ task and watch it. The stop button ends it; it only runs while the app is open.
 - New Ollama model: `ollama pull <name>` (stored in `models\ollama`).
 - New GGUF for llama.cpp: put it in `models\gguf` and add a section to `bin\llama-models.ini`.
 - New ComfyUI workflow for chat: export "API" format from ComfyUI into `workflows\`.
+- New tools (Home Assistant, GitHub, Spotify, Gmail, Google Calendar, Notion, Todoist, Brave Search, Obsidian,
+  YouTube transcripts, Wikipedia, time zones): one click in Prestige's **Tools → Get more tools**. They're saved in
+  `data\mcpo-extra.json` (on this PC only, since it holds their keys), merged into the tool server's config by
+  `scripts\tool-config.ps1`, and picked up while it runs (mcpo has `--hot-reload`; `update-tools.ps1` applies a change,
+  restarting just the tool server if an older start-all.ps1 started it without hot reload). You can also add any MCP
+  server to that file by hand, in the same `mcpServers` format as `tools\mcpo-config.json`, and run `update-tools.ps1`.
 
 ## 📁 Repository layout
 
@@ -264,6 +270,7 @@ open-app.ps1 · install-shortcut.ps1                     Open WebUI app window a
 install.ps1 · setup.cmd       installer (setup.cmd runs install.ps1)
 bin/llama-models.ini         llama.cpp router presets (Qwen3.6, Qwen3.8, UI-TARS)
 scripts/gpu-config.ps1       which GPU each service runs on, and what fits on it (docs/GPUS.md)
+scripts/tool-config.ps1 · update-tools.ps1   the tool server's config with tools added from Prestige's tool store
 tools/comfy_nodes/           the Workstation's ComfyUI node: upscaler / VAE / text encoder on a second card
 requirements/*.txt           pinned Python packages for the installer
 tools/scout_mcp.py           MCP server: Reddit/HF/GitHub scout, webcam snapshot, images, image edits, video jobs
