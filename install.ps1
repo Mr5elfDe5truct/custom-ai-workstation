@@ -190,6 +190,7 @@ $PackInfo = [ordered]@{
     images   = @{ GB = 36.5; Text = "Images         Qwen-Image-2.1 (+ 4-step turbo) and Z-Image-Turbo (ComfyUI) - text to image and editing" }
     video    = @{ GB = 60.3; Text = "Video          LTX-2.5 + Wan 2.2 (ComfyUI) - text/image to video with sound" }
     computer = @{ GB = 6.9;  Text = "Computer use   UI-TARS 1.5 7B (llama.cpp) - drives the mouse and keyboard" }
+    transcribe = @{ GB = 1.0; Text = "Transcribe     Phonon-2 + Nemotron 3 Diarization - recordings to text with who said what" }
 }
 Step 3 "Choosing models"
 if (-not $Packs) {
@@ -331,6 +332,33 @@ if ($Packs -contains "voice") {
     }
 }
 
+# Transcribe (transcribe pack): Phonon-2 speech recognition on the CPU (FermionResearch's package, in its own env) and
+# Nemotron 3 Diarization for who-spoke-when in NVIDIA's NeMo-Speech.cpp (CUDA build). tools\transcribe.py runs them.
+if ($Packs -contains "transcribe") {
+    $trEnv = Join-Path $Root "envs\transcribe"
+    if (Test-Path "$trEnv\Scripts\fermion.exe") { Skip "transcribe environment already set up" } else {
+        & uv venv $trEnv --python 3.12 -q
+        Push-Location $Root
+        & uv pip install -p $trEnv -r "requirements\transcribe.txt" -q
+        $code = $LASTEXITCODE
+        Pop-Location
+        if ($code) { throw "Installing the transcribe environment failed" }
+        Ok "transcribe environment (Phonon-2)"
+    }
+    $ns = Join-Path $Root "bin\nemo-speech"
+    if (Get-ChildItem "$ns\*\bin\nemo-speech.exe" -ErrorAction SilentlyContinue) { Skip "NeMo-Speech.cpp already there" } else {
+        $ver = "0.2.0"
+        $name = "nemo-speech-$ver-windows-x86_64-cuda.zip"
+        $zip = Join-Path $env:TEMP $name
+        Download "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v$ver/$name" $zip
+        $want = (& curl.exe -L -s "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v$ver/$name.sha256").Split(" ")[0].Trim()
+        if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne $want) { Remove-Item $zip; throw "NeMo-Speech.cpp's download didn't match its checksum; run install.ps1 again" }
+        Expand-Archive $zip $ns -Force
+        Remove-Item $zip
+        Ok "NeMo-Speech.cpp $ver"
+    }
+}
+
 # ---------- 8. ComfyUI ----------
 Step 8 "ComfyUI (images and video)"
 # With several Comfy Desktop installs, use the one that has the GGUF nodes, then the most recently used (same as start-all.ps1).
@@ -430,6 +458,17 @@ if ($Packs -contains "computer") {
     Download (HF "Mungert/UI-TARS-1.5-7B-GGUF" "UI-TARS-1.5-7B-q5_k_m.gguf") "$gguf\UI-TARS-1.5-7B-q5_k_m.gguf"
     Download (HF "Mungert/UI-TARS-1.5-7B-GGUF" "UI-TARS-1.5-7B-f16.mmproj") "$gguf\UI-TARS-1.5-7B-f16.mmproj"
     Say "    For the computer-use app itself, install UI-TARS Desktop into apps\ui-tars-desktop: https://github.com/bytedance/UI-TARS-desktop/releases" DarkGray
+}
+if ($Packs -contains "transcribe") {
+    # Nemotron 3 Diarization (102 MB, up to 8 speakers) for NeMo-Speech.cpp; Phonon-2 (160 MB) fetches itself into the
+    # Hugging Face cache, here on a second of silence so the first transcription doesn't wait for it.
+    Download (HF "nvidia/Nemotron-3-Diarization" "Nemotron-3-Diarization.q8_0.gguf") (Join-Path $Root "models\speech\Nemotron-3-Diarization.q8_0.gguf")
+    $quiet = Join-Path $env:TEMP "phonon-warmup.wav"
+    & ffmpeg -hide_banner -v error -y -f lavfi -i "anullsrc=r=16000:cl=mono" -t 1 $quiet
+    $env:HF_HUB_DISABLE_SYMLINKS_WARNING = "1"
+    & (Join-Path $Root "envs\transcribe\Scripts\fermion.exe") transcribe phonon-2 $quiet 2>$null | Out-Null
+    if ($LASTEXITCODE) { Warn "couldn't fetch Phonon-2 now; it downloads on the first transcription" } else { Ok "Phonon-2" }
+    Remove-Item $quiet -ErrorAction SilentlyContinue
 }
 if ($Packs -contains "images") {
     # Qwen-Image-2.1: Q4_K_M DiT (uncensored build), Qwen3-VL-8B text encoder (GGUF plus its vision mmproj) and VAE.
