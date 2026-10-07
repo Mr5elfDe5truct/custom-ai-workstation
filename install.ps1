@@ -261,6 +261,10 @@ if (Test-Path (Join-Path $Root "start-all.ps1")) {
     Ok "cloned $Repo"
 }
 Set-Location $Root
+# Prestige looks for the Workstation in %USERPROFILE%\RG Studios\Workstation, then in the folder named here.
+$rg = Join-Path $env:USERPROFILE "RG Studios"
+New-Item -ItemType Directory -Force $rg | Out-Null
+[IO.File]::WriteAllText((Join-Path $rg "workstation-folder.txt"), $Root)
 foreach ($d in "apps", "bin", "envs", "logs", "data", "models\gguf", "models\ollama", "models\comfy") {
     New-Item -ItemType Directory -Force (Join-Path $Root $d) | Out-Null
 }
@@ -585,7 +589,7 @@ Write-Host ""
 Write-Host "  Done. The Workstation is in $Root" -ForegroundColor Green
 Write-Host "  Open Prestige (or the 'Custom AI' shortcut) to start it; closing the window stops it." -ForegroundColor Gray
 if ($Root -ne (Join-Path $env:USERPROFILE "RG Studios\Workstation")) {
-    Write-Host "  In Prestige, set Settings > Workstation folder to $Root (it looks in your user folder by default)." -ForegroundColor Yellow
+    Write-Host "  An up-to-date Prestige finds it on its own; on an older one, set Settings > Workstation folder to $Root." -ForegroundColor Yellow
 }
 Write-Host "  Add model packs any time: .\install.ps1 -Packs vision,video" -ForegroundColor Gray
 Write-Host ""
