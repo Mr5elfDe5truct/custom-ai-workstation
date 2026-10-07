@@ -73,6 +73,7 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | ✏️ | **Image editing** | Qwen-Image-2.1 by instruction ("make it night", "swap the car for a horse"), with an optional reference image or mask |
 | 🧍 | **Reference images** | In Prestige: put a character or item from your own picture into a new image (Qwen-Image-2.1) or video (that image, or the picture itself, animated by LTX-2.5 with sound) |
 | 🎬 | **Video** | LTX-2.5 text-to-video with audio, Wan 2.2 image-to-video, as background jobs |
+| 🧊 | **Picture to 3D** (Prestige) | Pixal3D (TencentARC) turns a picture into a textured 3D model (.glb) through ComfyUI's own nodes: about 5 minutes and ~5.2 GB of VRAM on the 3060 |
 | 🗂️ | **Shared long-term memory** | every model reads and writes the same memory; chats are saved |
 | 📚 | **Chat with your files** (Prestige) | Drop PDFs, Word documents, notes or a folder into a chat; Qwen3-Embedding 0.6B (Ollama) indexes them on this PC and answers cite the file and page |
 
@@ -122,6 +123,7 @@ chat keeps going while a render runs. Small cards get smaller models and context
 | Image → video + audio | LTX-2.5 (same files), the picture as the first frame | ComfyUI + GGUF | — | ~4–11 min for 4 s at 768×512 (longer when the models load from disk; +2–3.5 min when Qwen-Image makes the first frame) |
 | Images (alternative) | Z-Image-Turbo | ComfyUI | 21 GB | ~35–40 s at 1024² |
 | Text → video + audio | LTX-2.5 22B distilled Q4_K_M, two-stage with the x2 latent upscaler | ComfyUI + GGUF | ~34 GB | ~3.5 min for 4 s at 768×512 from an NVMe drive (~9.5 min from an HDD); 5 s ~3.8 min, 10 s ~5.4 min, 1280×704 10 s ~10 min, all within 12 GB (part of the model streams from RAM) |
+| Picture → 3D model | Pixal3D int8 (TencentARC, MIT) + DINOv3, TRELLIS.2 shape and texture VAEs, MoGe-2 (field of view), BiRefNet (cut-out); remeshed, UV-unwrapped, PBR textures baked at 4096 (`workflows/pixal3d-image-to-3d.api.json`) | ComfyUI (native) | ~9.3 GB | ~5 min a model (293 s measured), peak 5.2 GB VRAM; a ~68 MB textured .glb |
 | Image → video | Wan 2.2 I2V A14B LightX2V 4-step Q4_K_M | ComfyUI + GGUF | ~25 GB | ~10 min for 5 s |
 | Long video (image → up to 4 chained shots) | Wan 2.2 I2V + Stable Video Infinity v2 PRO LoRAs (KJNodes, LayerStyle, Fill-Nodes, ReservedVRAM, Memory_Cleanup, essentials_mb, Easy-Use custom nodes) | ComfyUI | +2.5 GB of LoRAs | ~7 min for 4 shots of 49 frames at 480² |
 | Speech to text | Whisper large-v3-turbo (int8) | voice server (faster-whisper) | 1.6 GB | ~0.1–0.7 s a sentence on the GPU (~25 s on the CPU, so the CPU fallback is `base`) |
@@ -172,6 +174,7 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `images` | Qwen-Image-2.1 text-to-image, editing and reference images, its 4-step turbo (ComfyUI GGUF), and Z-Image-Turbo | 37 GB |
 | `video` | Wan 2.2 image-to-video and LTX-2.5 text- and image-to-video (ComfyUI GGUF) | 60 GB |
 | `computer` | UI-TARS 1.5 7B (llama.cpp) | 7 GB |
+| `3d` | Pixal3D for Prestige's Picture to 3D (ComfyUI): a picture to a textured .glb | 9.3 GB |
 
 With any pack it also gets Qwen3-Embedding 0.6B (0.6 GB), which Prestige's Knowledge uses to read your files.
 

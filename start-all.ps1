@@ -81,6 +81,9 @@ workstation_$($dir.Replace('-', '_')):
   loras: loras/
   latent_upscale_models: latent_upscale_models/
   upscale_models: upscale_models/
+  clip_vision: clip_vision/
+  geometry_estimation: geometry_estimation/
+  background_removal: background_removal/
 
 "@
 }

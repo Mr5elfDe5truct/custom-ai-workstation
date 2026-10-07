@@ -190,6 +190,7 @@ $PackInfo = [ordered]@{
     images   = @{ GB = 36.5; Text = "Images         Qwen-Image-2.1 (+ 4-step turbo) and Z-Image-Turbo (ComfyUI) - text to image and editing" }
     video    = @{ GB = 60.3; Text = "Video          LTX-2.5 + Wan 2.2 (ComfyUI) - text/image to video with sound" }
     computer = @{ GB = 6.9;  Text = "Computer use   UI-TARS 1.5 7B (llama.cpp) - drives the mouse and keyboard" }
+    "3d"     = @{ GB = 9.3;  Text = "Picture to 3D  Pixal3D (ComfyUI, int8) - a picture to a textured 3D model (.glb)" }
 }
 Step 3 "Choosing models"
 if (-not $Packs) {
@@ -430,6 +431,19 @@ if ($Packs -contains "computer") {
     Download (HF "Mungert/UI-TARS-1.5-7B-GGUF" "UI-TARS-1.5-7B-q5_k_m.gguf") "$gguf\UI-TARS-1.5-7B-q5_k_m.gguf"
     Download (HF "Mungert/UI-TARS-1.5-7B-GGUF" "UI-TARS-1.5-7B-f16.mmproj") "$gguf\UI-TARS-1.5-7B-f16.mmproj"
     Say "    For the computer-use app itself, install UI-TARS Desktop into apps\ui-tars-desktop: https://github.com/bytedance/UI-TARS-desktop/releases" DarkGray
+}
+if ($Packs -contains "3d") {
+    # Pixal3D (TencentARC, MIT) for workflows\pixal3d-image-to-3d.api.json, run by ComfyUI's own nodes (0.38 or newer):
+    # the int8 model (peaks at ~5.2 GB VRAM), its DINOv3 image encoder, the TRELLIS.2 shape and texture VAEs, MoGe for
+    # the camera's field of view and BiRefNet to cut out the subject.
+    foreach ($f in @(@("Comfy-Org/Pixal3D", "diffusion_models/pixal3d_int8_convrot.safetensors"),
+                     @("Comfy-Org/Pixal3D", "clip_vision/dino_v3_L_naf_fp32.safetensors"),
+                     @("Comfy-Org/Pixal3D", "vae/trellis_2_shape_vae_bf16.safetensors"),
+                     @("Comfy-Org/Pixal3D", "vae/trellis_2_texture_vae_bf16.safetensors"),
+                     @("Comfy-Org/MoGe", "geometry_estimation/moge_2_vitl_normal_fp16.safetensors"),
+                     @("Comfy-Org/BiRefNet", "background_removal/birefnet.safetensors"))) {
+        Download (HF $f[0] $f[1]) (Join-Path $comfyModels ($f[1] -replace "/", "\"))
+    }
 }
 if ($Packs -contains "images") {
     # Qwen-Image-2.1: Q4_K_M DiT (uncensored build), Qwen3-VL-8B text encoder (GGUF plus its vision mmproj) and VAE.
