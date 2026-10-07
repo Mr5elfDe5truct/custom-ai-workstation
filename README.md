@@ -74,6 +74,7 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | 🧍 | **Reference images** | In Prestige: put a character or item from your own picture into a new image (Qwen-Image-2.1) or video (that image, or the picture itself, animated by LTX-2.5 with sound) |
 | 🎬 | **Video** | LTX-2.5 text-to-video with audio, Wan 2.2 image-to-video, as background jobs |
 | 🎵 | **Songs** (Prestige) | ACE-Step 1.5 turbo through ComfyUI: a style and lyrics (or the chat model writes them with `/song`) become a sung song, 30 s to 4 min |
+| 🎧 | **Transcribe** (Prestige) | Drop a recording or a video into a chat: Phonon-2 writes it down and Nemotron 3 Diarization says who spoke when, then the chat model summarises it |
 | 🗂️ | **Shared long-term memory** | every model reads and writes the same memory; chats are saved |
 | 📚 | **Chat with your files** (Prestige) | Drop PDFs, Word documents, notes or a folder into a chat; Qwen3-Embedding 0.6B (Ollama) indexes them on this PC and answers cite the file and page |
 
@@ -96,6 +97,7 @@ stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe
 | 8081 | llama.cpp router | Qwen3.6 35B, Qwen3.8 27B and UI-TARS, one at a time; unloads after 3 min idle (`bin/llama-models.ini`) |
 | 8188 | ComfyUI (headless) | its own install, or Comfy Desktop's; frees the GPU after each job |
 | 8880 | Kokoro | text-to-speech on CPU |
+| 8891 | Phonon server | Phonon-2 speech-to-text on the CPU (transcribe pack), the Whisper API shape; Prestige's Transcribe and, if you pick it, Live calls use it (`fermion serve phonon-2`) |
 | 8890 | voice server | Whisper large-v3-turbo speech-to-text and VoxCPM2 voices, OpenAI-compatible, on the GPU when used; streams VoxCPM2 speech as raw PCM (`"stream": true`) and preloads both for Live calls (`/v1/audio/load`) (`tools/voice_server.py`) |
 | 8200 | mcpo tool server | research, webcam, fetch, images, image edits, video jobs, files, shell, browser (`tools/mcpo-config.json`), plus tools added from Prestige's tool store (`data\mcpo-extra.json`), reloaded while it runs |
 
@@ -126,6 +128,7 @@ chat keeps going while a render runs. Small cards get smaller models and context
 | Image → video | Wan 2.2 I2V A14B LightX2V 4-step Q4_K_M | ComfyUI + GGUF | ~25 GB | ~10 min for 5 s |
 | Long video (image → up to 4 chained shots) | Wan 2.2 I2V + Stable Video Infinity v2 PRO LoRAs (KJNodes, LayerStyle, Fill-Nodes, ReservedVRAM, Memory_Cleanup, essentials_mb, Easy-Use custom nodes) | ComfyUI | +2.5 GB of LoRAs | ~7 min for 4 shots of 49 frames at 480² |
 | Songs (Prestige) | ACE-Step 1.5 turbo: ~2.4B diffusion model, Qwen3 0.6B text encoder and 1.7B language model for the audio codes, 8 steps, tiled audio decode | ComfyUI (native) | ~10 GB | 30 s of music in ~18 s, 2 min in ~44 s, 4 min in ~53 s; ~5.3 GB VRAM at any length (+20–60 s the first time after a big chat model unloads) |
+| Transcribe (Prestige) | Phonon-2 (FermionResearch's 2-bit Parakeet TDT 0.6B v3, English) for the words, Nemotron 3 Diarization (NVIDIA, up to 8 speakers) in NeMo-Speech.cpp for who said what (`tools/transcribe.py`) | Phonon server (CPU) + NeMo-Speech.cpp (GPU) | 0.3 GB + 0.7 GB env | a 51 s two-person meeting in 6.3 s, a 1:42 three-person MP4 in 11.5 s; the 3 s of speech a Live turn has in ~0.3 s (Whisper turbo: ~0.7 s on the GPU) |
 | Speech to text | Whisper large-v3-turbo (int8) | voice server (faster-whisper) | 1.6 GB | ~0.1–0.7 s a sentence on the GPU (~25 s on the CPU, so the CPU fallback is `base`) |
 | Text to speech | Kokoro 82M | Kokoro-FastAPI | small | CPU, real time |
 | Expressive speech | VoxCPM2 2B: designed voices, cloning from a short clip, 48 kHz | voice server | 5 GB | ~1.2× real time (first sound ~0.3 s when streamed); 6 GB VRAM, so chat models unload while it speaks (except the small Live model) |
@@ -175,6 +178,7 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `video` | Wan 2.2 image-to-video and LTX-2.5 text- and image-to-video (ComfyUI GGUF) | 60 GB |
 | `computer` | UI-TARS 1.5 7B (llama.cpp); it then asks about Nex-N2.5-mini (+21.6 GB, 32 GB RAM; or `-Nex`), the model Prestige's Do it for me prefers | 7 GB |
 | `music` | ACE-Step 1.5 turbo (ComfyUI) for Prestige's songs: Studio's Music tab and `/song` in chat | 10 GB |
+| `transcribe` | Phonon-2 speech-to-text (CPU) and Nemotron 3 Diarization (NeMo-Speech.cpp, CUDA) for Prestige's Transcribe: recordings and videos to text with who said what | 1 GB |
 
 With any pack it also gets Qwen3-Embedding 0.6B (0.6 GB), which Prestige's Knowledge uses to read your files.
 

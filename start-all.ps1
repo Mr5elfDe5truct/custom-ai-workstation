@@ -167,6 +167,13 @@ if ($Voice) {
     Start-Bg "voice" 8890 "$Root\envs\voice\Scripts\python.exe" "`"$Root\tools\voice_server.py`"" $Root "voice"
 }
 
+# 3c. Phonon server (transcribe pack): Phonon-2 speech-to-text on the CPU, the Whisper API shape on :8891. Prestige's
+#     Transcribe uses it (tools\transcribe.py), and Live calls can listen with it instead of Whisper. ~2 GB of RAM, no VRAM.
+if (Test-Path "$Root\envs\transcribe\Scripts\fermion.exe") {
+    $env:HF_HUB_DISABLE_SYMLINKS_WARNING = "1"
+    Start-Bg "phonon" 8891 "$Root\envs\transcribe\Scripts\fermion.exe" "serve phonon-2 --port 8891" $Root
+}
+
 # 4. Tool server: research scout, webcam, video jobs, web fetch, files, shell (Desktop Commander), browser (Playwright),
 #    plus tools added from Prestige's tool store. --hot-reload picks up added and removed tools while it runs.
 Start-Bg "mcpo" 8200 "$Root\envs\tools\Scripts\mcpo.exe" (Get-McpoArgs $Runtime)
