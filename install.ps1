@@ -194,6 +194,7 @@ $PackInfo = [ordered]@{
     computer = @{ GB = 6.9;  Text = "Computer use   UI-TARS 1.5 7B (llama.cpp) - drives the mouse and keyboard; asks about Nex-N2.5-mini (+21.6 GB)" }
     music    = @{ GB = 10.0; Text = "Music          ACE-Step 1.5 turbo (ComfyUI) - songs with vocals from a style and lyrics" }
     transcribe = @{ GB = 1.0; Text = "Transcribe     Phonon-2 + Nemotron 3 Diarization - recordings to text with who said what" }
+    "3d"     = @{ GB = 9.3;  Text = "Picture to 3D  Pixal3D (ComfyUI, int8) - a picture to a textured 3D model (.glb)" }
 }
 Step 3 "Choosing models"
 if (-not $Packs) {
@@ -494,6 +495,19 @@ if ($Packs -contains "transcribe") {
     & (Join-Path $Root "envs\transcribe\Scripts\fermion.exe") transcribe phonon-2 $quiet 2>$null | Out-Null
     if ($LASTEXITCODE) { Warn "couldn't fetch Phonon-2 now; it downloads on the first transcription" } else { Ok "Phonon-2" }
     Remove-Item $quiet -ErrorAction SilentlyContinue
+}
+if ($Packs -contains "3d") {
+    # Pixal3D (TencentARC, MIT) for workflows\pixal3d-image-to-3d.api.json, run by ComfyUI's own nodes (0.38 or newer):
+    # the int8 model (peaks at ~5.2 GB VRAM), its DINOv3 image encoder, the TRELLIS.2 shape and texture VAEs, MoGe for
+    # the camera's field of view and BiRefNet to cut out the subject.
+    foreach ($f in @(@("Comfy-Org/Pixal3D", "diffusion_models/pixal3d_int8_convrot.safetensors"),
+                     @("Comfy-Org/Pixal3D", "clip_vision/dino_v3_L_naf_fp32.safetensors"),
+                     @("Comfy-Org/Pixal3D", "vae/trellis_2_shape_vae_bf16.safetensors"),
+                     @("Comfy-Org/Pixal3D", "vae/trellis_2_texture_vae_bf16.safetensors"),
+                     @("Comfy-Org/MoGe", "geometry_estimation/moge_2_vitl_normal_fp16.safetensors"),
+                     @("Comfy-Org/BiRefNet", "background_removal/birefnet.safetensors"))) {
+        Download (HF $f[0] $f[1]) (Join-Path $comfyModels ($f[1] -replace "/", "\"))
+    }
 }
 if ($Packs -contains "images") {
     # Qwen-Image-2.1: Q4_K_M DiT (uncensored build), Qwen3-VL-8B text encoder (GGUF plus its vision mmproj) and VAE.
