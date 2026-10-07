@@ -97,6 +97,10 @@ Every length Prestige offers (up to 10 s) stays within the 3060. Prestige's Stud
 how much of the model stays on ComfyUI's main card, and what the second card holds; it warns only when less than 3 GB
 would be left for the model.
 
+Songs (ACE-Step 1.5, the `music` pack) run on ComfyUI's main card as well. They need only ~5.3 GB, so the 2060 looked
+like a good home, but with all of ACE-Step loaded there its 1.7B language model wrote the audio codes at 1.7 s a token,
+against ~60 tokens a second on the 3060: a 60 s song took 9 minutes instead of 26 s.
+
 ## data\gpu-settings.json
 
 Optional. Every key can be left out ([example](gpu-settings.example.json)):

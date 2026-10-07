@@ -73,6 +73,7 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | ✏️ | **Image editing** | Qwen-Image-2.1 by instruction ("make it night", "swap the car for a horse"), with an optional reference image or mask |
 | 🧍 | **Reference images** | In Prestige: put a character or item from your own picture into a new image (Qwen-Image-2.1) or video (that image, or the picture itself, animated by LTX-2.5 with sound) |
 | 🎬 | **Video** | LTX-2.5 text-to-video with audio, Wan 2.2 image-to-video, as background jobs |
+| 🎵 | **Songs** (Prestige) | ACE-Step 1.5 turbo through ComfyUI: a style and lyrics (or the chat model writes them with `/song`) become a sung song, 30 s to 4 min |
 | 🗂️ | **Shared long-term memory** | every model reads and writes the same memory; chats are saved |
 | 📚 | **Chat with your files** (Prestige) | Drop PDFs, Word documents, notes or a folder into a chat; Qwen3-Embedding 0.6B (Ollama) indexes them on this PC and answers cite the file and page |
 
@@ -80,7 +81,7 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 
 **[Prestige by R.G. Studios](https://github.com/Mr5elfDe5truct/prestige)** is a native Windows app for this stack, an alternative to the
 Open WebUI window. It has streaming chat with every model, shared memory, a System dashboard with model load and unload, a Studio gallery
-with image and video generation, voice conversation with an animated avatar, Live voice and webcam calls, webcam vision, and chat with your
+with image, video and song generation, voice conversation with an animated avatar, Live voice and webcam calls, webcam vision, and chat with your
 own files (answers cite the file and page). Opening it starts the stack, and closing it
 stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe5truct/prestige/releases) page.
 
@@ -124,6 +125,7 @@ chat keeps going while a render runs. Small cards get smaller models and context
 | Text → video + audio | LTX-2.5 22B distilled Q4_K_M, two-stage with the x2 latent upscaler | ComfyUI + GGUF | ~34 GB | ~3.5 min for 4 s at 768×512 from an NVMe drive (~9.5 min from an HDD); 5 s ~3.8 min, 10 s ~5.4 min, 1280×704 10 s ~10 min, all within 12 GB (part of the model streams from RAM) |
 | Image → video | Wan 2.2 I2V A14B LightX2V 4-step Q4_K_M | ComfyUI + GGUF | ~25 GB | ~10 min for 5 s |
 | Long video (image → up to 4 chained shots) | Wan 2.2 I2V + Stable Video Infinity v2 PRO LoRAs (KJNodes, LayerStyle, Fill-Nodes, ReservedVRAM, Memory_Cleanup, essentials_mb, Easy-Use custom nodes) | ComfyUI | +2.5 GB of LoRAs | ~7 min for 4 shots of 49 frames at 480² |
+| Songs (Prestige) | ACE-Step 1.5 turbo: ~2.4B diffusion model, Qwen3 0.6B text encoder and 1.7B language model for the audio codes, 8 steps, tiled audio decode | ComfyUI (native) | ~10 GB | 30 s of music in ~18 s, 2 min in ~44 s, 4 min in ~53 s; ~5.3 GB VRAM at any length (+20–60 s the first time after a big chat model unloads) |
 | Speech to text | Whisper large-v3-turbo (int8) | voice server (faster-whisper) | 1.6 GB | ~0.1–0.7 s a sentence on the GPU (~25 s on the CPU, so the CPU fallback is `base`) |
 | Text to speech | Kokoro 82M | Kokoro-FastAPI | small | CPU, real time |
 | Expressive speech | VoxCPM2 2B: designed voices, cloning from a short clip, 48 kHz | voice server | 5 GB | ~1.2× real time (first sound ~0.3 s when streamed); 6 GB VRAM, so chat models unload while it speaks (except the small Live model) |
@@ -172,6 +174,7 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `images` | Qwen-Image-2.1 text-to-image, editing and reference images, its 4-step turbo (ComfyUI GGUF), and Z-Image-Turbo | 37 GB |
 | `video` | Wan 2.2 image-to-video and LTX-2.5 text- and image-to-video (ComfyUI GGUF) | 60 GB |
 | `computer` | UI-TARS 1.5 7B (llama.cpp) | 7 GB |
+| `music` | ACE-Step 1.5 turbo (ComfyUI) for Prestige's songs: Studio's Music tab and `/song` in chat | 10 GB |
 
 With any pack it also gets Qwen3-Embedding 0.6B (0.6 GB), which Prestige's Knowledge uses to read your files.
 
