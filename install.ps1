@@ -9,6 +9,7 @@
 #   .\install.ps1 -Yes -Packs fast,images       no questions, these model packs
 #   .\install.ps1 -Packs none                   software only, no models
 #   .\install.ps1 -GpuMode pool                 with several GPUs: split (default), pool or single
+#   .\install.ps1 -Packs computer -Nex          computer use, with Nex-N2.5-mini for Prestige's Do it for me
 # Without cloning first, from PowerShell:
 #   irm https://raw.githubusercontent.com/Mr5elfDe5truct/custom-ai-workstation/main/install.ps1 -OutFile "$env:TEMP\install.ps1"
 #   powershell -ExecutionPolicy Bypass -File "$env:TEMP\install.ps1"
@@ -21,6 +22,7 @@ param(
     [switch]$NoShortcuts,     # leave the Desktop / Start Menu shortcuts alone
     [switch]$NoComfyDesktop,  # install ComfyUI into the workstation even if Comfy Desktop is present
     [switch]$NoGpuCheck,      # carry on without an NVIDIA GPU (for testing the installer, e.g. in Windows Sandbox)
+    [switch]$Nex,             # with the computer pack: also get Nex-N2.5-mini without asking (asked otherwise)
     [ValidateSet("", "split", "pool", "single")][string]$GpuMode,   # with several GPUs (asked otherwise; docs\GPUS.md)
     [string]$Branch = "main"
 )
@@ -189,7 +191,8 @@ $PackInfo = [ordered]@{
     voice    = @{ GB = 18.1; Text = "Voice          Whisper turbo + VoxCPM2 voices and cloning + Qwen3.5 2B/4B for Live calls (GPU, 8 GB+)" }
     images   = @{ GB = 36.5; Text = "Images         Qwen-Image-2.1 (+ 4-step turbo) and Z-Image-Turbo (ComfyUI) - text to image and editing" }
     video    = @{ GB = 60.3; Text = "Video          LTX-2.5 + Wan 2.2 (ComfyUI) - text/image to video with sound" }
-    computer = @{ GB = 6.9;  Text = "Computer use   UI-TARS 1.5 7B (llama.cpp) - drives the mouse and keyboard" }
+    computer = @{ GB = 6.9;  Text = "Computer use   UI-TARS 1.5 7B (llama.cpp) - drives the mouse and keyboard; asks about Nex-N2.5-mini (+21.6 GB)" }
+    music    = @{ GB = 10.0; Text = "Music          ACE-Step 1.5 turbo (ComfyUI) - songs with vocals from a style and lyrics" }
     transcribe = @{ GB = 1.0; Text = "Transcribe     Phonon-2 + Nemotron 3 Diarization - recordings to text with who said what" }
 }
 Step 3 "Choosing models"
@@ -222,6 +225,7 @@ if ($gpus) {
     if ($Packs -contains "deep" -and $vramGB -lt 11) { Warn "The deep model fits whole on 12 GB; on $vramGB GB part of it runs from RAM (a few tok/s)." }
     if ($Packs -contains "voice" -and $vramGB -lt 8) { Warn "VoxCPM2 voices need ~7 GB of VRAM; on $vramGB GB stick to the Kokoro voices." }
     if (($Packs -contains "images" -or $Packs -contains "video") -and $vramGB -lt 10) { Warn "Images and video are tuned for 12 GB; on $vramGB GB they render, but slower." }
+    if ($Packs -contains "music" -and $vramGB -lt 6) { Warn "ACE-Step songs peak at about 5.3 GB of VRAM; on $vramGB GB part of it runs from RAM (slow)." }
 }
 $needGB = 12 + ($Packs | ForEach-Object { $PackInfo[$_].GB } | Measure-Object -Sum).Sum   # ~12 GB for software
 $drive = Get-PSDrive ((Split-Path $Root -Qualifier).TrimEnd(":"))
@@ -458,6 +462,27 @@ if ($Packs -contains "computer") {
     Download (HF "Mungert/UI-TARS-1.5-7B-GGUF" "UI-TARS-1.5-7B-q5_k_m.gguf") "$gguf\UI-TARS-1.5-7B-q5_k_m.gguf"
     Download (HF "Mungert/UI-TARS-1.5-7B-GGUF" "UI-TARS-1.5-7B-f16.mmproj") "$gguf\UI-TARS-1.5-7B-f16.mmproj"
     Say "    For the computer-use app itself, install UI-TARS Desktop into apps\ui-tars-desktop: https://github.com/bytedance/UI-TARS-desktop/releases" DarkGray
+    # Optional: Nex-N2.5-mini, the model Prestige's "Do it for me" (/do) prefers. A 35B-A3B trained for computer use,
+    # run like Qwen3.6 35B with expert layers in RAM; ~10 s a step on an RTX 3060 + 2060.
+    $nexFile = "$gguf\nex-agi_Nex-N2.5-mini-Q4_K_M.gguf"
+    if ((Test-Path $nexFile) -or $Nex -or (AskYesNo "    Also get Nex-N2.5-mini (21.6 GB, needs 32 GB RAM) for Prestige's Do it for me?" $false)) {
+        Download (HF "bartowski/nex-agi_Nex-N2.5-mini-GGUF" "nex-agi_Nex-N2.5-mini-Q4_K_M.gguf") $nexFile
+        Download (HF "bartowski/nex-agi_Nex-N2.5-mini-GGUF" "mmproj-nex-agi_Nex-N2.5-mini-f16.gguf") "$gguf\mmproj-nex-agi_Nex-N2.5-mini-f16.gguf"
+        # Registered with the llama.cpp router the way Prestige's model catalog adds models.
+        $ini = Join-Path $Root "bin\llama-models.ini"
+        if ((Test-Path $ini) -and -not (Select-String -Path $ini -Pattern '^\[nex-n2\.5-mini\]' -Quiet)) {
+            Add-Content -Path $ini -Value @"
+
+; Nex-N2.5-mini (bartowski/nex-agi_Nex-N2.5-mini-GGUF), a 35B-A3B computer-use model; experts in RAM like Qwen3.6 35B.
+[nex-n2.5-mini]
+model = {ROOT}\models\gguf\nex-agi_Nex-N2.5-mini-Q4_K_M.gguf
+mmproj = {ROOT}\models\gguf\mmproj-nex-agi_Nex-N2.5-mini-f16.gguf
+n-cpu-moe = 25
+c = 32768
+"@
+            Ok "Nex-N2.5-mini added to bin\llama-models.ini"
+        }
+    }
 }
 if ($Packs -contains "transcribe") {
     # Nemotron 3 Diarization (102 MB, up to 8 speakers) for NeMo-Speech.cpp; Phonon-2 (160 MB) fetches itself into the
@@ -496,6 +521,15 @@ if ($Packs -contains "video") {
         @("comfyicu/LTX-2.5", "latent_upscale_models/ltx-2.5-latent-spatial-upscaler-x2-bf16-1.0.safetensors", "latent_upscale_models")
     )
     foreach ($f in $v) { Download (HF $f[0] $f[1]) (Join-Path $comfyModels "$($f[2])\$(Split-Path $f[1] -Leaf)") }
+}
+if ($Packs -contains "music") {
+    # ACE-Step 1.5 turbo for workflows\ace-step-15-song.api.json: the diffusion model, its Qwen 0.6B text encoder and
+    # 1.7B language model (writes the audio codes), and its VAE. ComfyUI 0.37 or newer runs it natively.
+    $ace = "Comfy-Org/ace_step_1.5_ComfyUI_files"
+    foreach ($f in @(@("diffusion_models", "acestep_v1.5_turbo.safetensors"), @("text_encoders", "qwen_0.6b_ace15.safetensors"),
+                     @("text_encoders", "qwen_1.7b_ace15.safetensors"), @("vae", "ace_1.5_vae.safetensors"))) {
+        Download (HF $ace "split_files/$($f[0])/$($f[1])") (Join-Path $comfyModels "$($f[0])\$($f[1])")
+    }
 }
 if (-not $Packs) { Skip "no model packs picked (add them later with: .\install.ps1 -Packs fast,images)" }
 
