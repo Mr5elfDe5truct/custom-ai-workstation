@@ -68,7 +68,7 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | 📞 | **Live calls** (Prestige) | Hands-free voice and webcam calls: Whisper, a Qwen3.5 vision model and VoxCPM2 all on the GPU at once, speech streamed as it's made, ~3 s from the end of your sentence to its voice |
 | 🧰 | **Tools** | web search, web fetch, files, PowerShell (guarded), Playwright browser control |
 | 🔭 | **Research scout** | Reddit, Hugging Face trending GGUFs and GitHub search, plus a Markdown scout report |
-| 🖱️ | **Computer use** | UI-TARS Desktop driven by a local UI-TARS-1.5-7B |
+| 🖱️ | **Computer use** | Prestige's **Do it for me** (`/do`): Qwen3.8 27B or Nex-N2.5-mini sees the screen and drives the mouse and keyboard, with each step approved in a small panel; or UI-TARS Desktop driven by a local UI-TARS-1.5-7B |
 | 🖼️ | **Images** | Qwen-Image-2.1 (good with text, signs and posters), its 4-step turbo, or Z-Image-Turbo through ComfyUI, from the image button or by asking |
 | ✏️ | **Image editing** | Qwen-Image-2.1 by instruction ("make it night", "swap the car for a horse"), with an optional reference image or mask |
 | 🧍 | **Reference images** | In Prestige: put a character or item from your own picture into a new image (Qwen-Image-2.1) or video (that image, or the picture itself, animated by LTX-2.5 with sound) |
@@ -173,7 +173,7 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `voice` | Whisper large-v3-turbo speech-to-text and VoxCPM2 voices on the GPU (needs 8 GB+ VRAM), plus Qwen3.5 2B and 4B for Prestige's Live calls; without it, Open WebUI's CPU Whisper `base` is used | 18 GB |
 | `images` | Qwen-Image-2.1 text-to-image, editing and reference images, its 4-step turbo (ComfyUI GGUF), and Z-Image-Turbo | 37 GB |
 | `video` | Wan 2.2 image-to-video and LTX-2.5 text- and image-to-video (ComfyUI GGUF) | 60 GB |
-| `computer` | UI-TARS 1.5 7B (llama.cpp) | 7 GB |
+| `computer` | UI-TARS 1.5 7B (llama.cpp); it then asks about Nex-N2.5-mini (+21.6 GB, 32 GB RAM; or `-Nex`), the model Prestige's Do it for me prefers | 7 GB |
 | `music` | ACE-Step 1.5 turbo (ComfyUI) for Prestige's songs: Studio's Music tab and `/song` in chat | 10 GB |
 
 With any pack it also gets Qwen3-Embedding 0.6B (0.6 GB), which Prestige's Knowledge uses to read your files.
@@ -248,9 +248,13 @@ Three more are built in: **Cyberpunk Neon**, **Glass** (frosted panels over a co
 - **Browser control:** enable the **browser** tool for a chat, then "open github.com/ggml-org/llama.cpp/releases and tell me the newest tag".
 - **Memory:** say "remember that …". Every 4 messages the model also saves anything worth keeping. Manage it in Settings → Personalization → Memory.
 
-### Computer use (UI-TARS)
+### Computer use
 
-Run `.\start-computer-use.ps1`. First time only, in UI-TARS settings set VLM Provider **Hugging Face for UI-TARS-1.5**,
+In Prestige, type `/do` and a task ("/do open Calculator and work out 12 times 34"). It uses Qwen3.8 27B (the `deep`
+pack) or Nex-N2.5-mini (Prestige's model catalog, 21.6 GB, trained for computer use and ~3× faster per step on an RTX
+3060 + 2060). Prestige shrinks to a panel in the corner that shows each step before it happens; approve, skip or stop.
+
+UI-TARS Desktop is the other way: run `.\start-computer-use.ps1`. First time only, in UI-TARS settings set VLM Provider **Hugging Face for UI-TARS-1.5**,
 Base URL **http://127.0.0.1:8081/v1**, API Key **none**, Model **ui-tars-1.5-7b**. Choose **Local Computer**, type a
 task and watch it. The stop button ends it; it only runs while the app is open.
 
