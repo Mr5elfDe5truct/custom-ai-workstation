@@ -195,6 +195,7 @@ $PackInfo = [ordered]@{
     music    = @{ GB = 10.0; Text = "Music          ACE-Step 1.5 turbo (ComfyUI) - songs with vocals from a style and lyrics" }
     transcribe = @{ GB = 1.0; Text = "Transcribe     Phonon-2 + Nemotron 3 Diarization - recordings to text with who said what" }
     "3d"     = @{ GB = 9.3;  Text = "Picture to 3D  Pixal3D (ComfyUI, int8) - a picture to a textured 3D model (.glb)" }
+    talk     = @{ GB = 17.4; Text = "Talking        InfiniteTalk on Wan 2.1 14B (ComfyUI, GGUF) - a face and a voice to a lip-synced video" }
 }
 Step 3 "Choosing models"
 if (-not $Packs) {
@@ -507,6 +508,20 @@ if ($Packs -contains "3d") {
                      @("Comfy-Org/MoGe", "geometry_estimation/moge_2_vitl_normal_fp16.safetensors"),
                      @("Comfy-Org/BiRefNet", "background_removal/birefnet.safetensors"))) {
         Download (HF $f[0] $f[1]) (Join-Path $comfyModels ($f[1] -replace "/", "\"))
+    }
+}
+if ($Packs -contains "talk") {
+    # InfiniteTalk (MeiGen, Apache-2.0) for workflows\infinitetalk-talking.api.json, run by ComfyUI's own nodes (0.38 or
+    # newer): Wan 2.1 I2V 14B 480p in GGUF Q4_K_M with the lightx2v step-distill LoRA (4 steps, no CFG), InfiniteTalk's
+    # audio patch and the wav2vec2 speech encoder. The Wan text encoder and VAE are the video pack's (fetched here too
+    # when it isn't installed).
+    foreach ($f in @(@("city96/Wan2.1-I2V-14B-480P-gguf", "wan2.1-i2v-14b-480p-Q4_K_M.gguf", "unet"),
+                     @("Kijai/WanVideo_comfy", "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors", "loras"),
+                     @("Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/model_patches/wan2.1_infiniteTalk_single_fp16.safetensors", "model_patches"),
+                     @("Kijai/wav2vec2_safetensors", "wav2vec2-chinese-base_fp16.safetensors", "audio_encoders"),
+                     @("Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", "text_encoders"),
+                     @("Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/vae/wan_2.1_vae.safetensors", "vae"))) {
+        Download (HF $f[0] $f[1]) (Join-Path $comfyModels "$($f[2])\$(Split-Path $f[1] -Leaf)")
     }
 }
 if ($Packs -contains "images") {
