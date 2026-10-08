@@ -132,9 +132,17 @@ function Get-GpuPlan($Root, [string]$Mode = "") {
         $comfyAux = if ($aux -in "auto", "on", "true") { "upscaler" } else { $aux }
     }
 
+    # comfyQuick "on": a second, small ComfyUI on the small card (port 8189) for quick jobs, Prestige's click to select
+    # (SAM 3.1, ~2 GB while it runs, 3 s a selection), so they don't wait for a render on the big card. Off by default:
+    # it takes ~2.4 GB of system RAM, which long renders (InfiniteTalk, ~22 GB) can use.
+    $comfyQuick = $null
+    if ("$(Get-Setting $s "comfyQuick")".ToLower() -in "on", "true" -and $small -and -not ($svc.comfyui.Index -contains $small.Index)) {
+        $comfyQuick = $small
+    }
+
     [pscustomobject]@{
         Mode = $Mode; Gpus = $gpus; Big = $big; Small = $small; Services = $svc; Notes = $notes
-        OllamaContext = $ctx; LlamaFit = $fitOn; TensorSplit = $split; LlamaGB = $llamaGB; ComfyAux = $comfyAux
+        OllamaContext = $ctx; LlamaFit = $fitOn; TensorSplit = $split; LlamaGB = $llamaGB; ComfyAux = $comfyAux; ComfyQuick = $comfyQuick
         # Several cards in the PC (even with some excluded): services get pinned.
         Multi = $all.Count -gt 1
     }
@@ -145,7 +153,8 @@ function Get-GpuPlan($Root, [string]$Mode = "") {
 function Set-ServiceGpus($Plan, $Service) {
     if (-not $Plan -or -not $Plan.Multi) { Remove-Item Env:CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue; return }
     $env:CUDA_DEVICE_ORDER = "PCI_BUS_ID"
-    $env:CUDA_VISIBLE_DEVICES = ($Plan.Services[$Service] | ForEach-Object Uuid) -join ","
+    $cards = if ($Service -eq "comfyquick") { @($Plan.ComfyQuick) } else { $Plan.Services[$Service] }
+    $env:CUDA_VISIBLE_DEVICES = ($cards | ForEach-Object Uuid) -join ","
     # Ollama also finds the cards through Vulkan, which CUDA_VISIBLE_DEVICES doesn't hide: it would load onto the
     # other card that way, at a fraction of the speed. The cards are NVIDIA, so CUDA alone is right.
     if ($Service -eq "ollama") { $env:OLLAMA_VULKAN = "0" }
@@ -202,6 +211,7 @@ function Format-GpuPlan($Plan) {
         $parts = ($Plan.ComfyAux -split "," | ForEach-Object { @{ text_encoder = "text encoders"; vae = "VAEs"; upscaler = "LTX upscaler" }[$_] }) -join ", "
         $out += "    ComfyUI: diffusion model on the $($c[0].Name); $parts on the $($c[1].Name)"
     }
+    if ($Plan.ComfyQuick) { $out += "    Quick ComfyUI (click to select) on the $($Plan.ComfyQuick.Name), port 8189" }
     foreach ($n in $Plan.Notes) { $out += "    ! $n" }
     $out -join "`n"
 }

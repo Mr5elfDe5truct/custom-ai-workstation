@@ -196,6 +196,7 @@ $PackInfo = [ordered]@{
     transcribe = @{ GB = 1.0; Text = "Transcribe     Phonon-2 + Nemotron 3 Diarization - recordings to text with who said what" }
     "3d"     = @{ GB = 9.3;  Text = "Picture to 3D  Pixal3D (ComfyUI, int8) - a picture to a textured 3D model (.glb)" }
     talk     = @{ GB = 17.4; Text = "Talking        InfiniteTalk on Wan 2.1 14B (ComfyUI, GGUF) - a face and a voice to a lip-synced video" }
+    select   = @{ GB = 2.2;  Text = "Select         SAM 3.1 + BiRefNet (ComfyUI) - click or name to select, cut-outs, background removal" }
 }
 Step 3 "Choosing models"
 if (-not $Packs) {
@@ -522,6 +523,14 @@ if ($Packs -contains "talk") {
                      @("Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors", "text_encoders"),
                      @("Comfy-Org/Wan_2.1_ComfyUI_repackaged", "split_files/vae/wan_2.1_vae.safetensors", "vae"))) {
         Download (HF $f[0] $f[1]) (Join-Path $comfyModels "$($f[2])\$(Split-Path $f[1] -Leaf)")
+    }
+}
+if ($Packs -contains "select") {
+    # SAM 3.1 (Meta) for workflows\sam3-select.api.json and sam3-video-cutout.api.json, and BiRefNet (also in the 3d pack)
+    # for cutout.api.json's Remove background. ComfyUI 0.38 runs both natively.
+    foreach ($f in @(@("Comfy-Org/sam3.1", "checkpoints/sam3.1_multiplex_fp16.safetensors"),
+                     @("Comfy-Org/BiRefNet", "background_removal/birefnet.safetensors"))) {
+        Download (HF $f[0] $f[1]) (Join-Path $comfyModels ($f[1] -replace "/", "\"))
     }
 }
 if ($Packs -contains "images") {

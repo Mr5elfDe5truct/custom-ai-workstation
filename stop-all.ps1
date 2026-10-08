@@ -16,8 +16,8 @@ Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($Root, 'OrdinalIgno
     Write-Host "  stopping $($_.Name) ($($_.Id))"
     Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
 }
-# Headless ComfyUI runs from Comfy Desktop's folder, so find it by its port (8188) instead.
-Get-NetTCPConnection -LocalPort 8188 -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
+# Headless ComfyUI runs from Comfy Desktop's folder, so find it by its port (8188, and 8189 for the quick one) instead.
+Get-NetTCPConnection -LocalPort 8188, 8189 -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
     Write-Host "  stopping ComfyUI ($($_.OwningProcess))"
     Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue
 }

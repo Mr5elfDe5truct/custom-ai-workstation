@@ -195,6 +195,14 @@ if (-not $NoComfy -and $ComfyDir) {
         "--extra-model-paths-config", "`"$Runtime\comfy-extra-models.yaml`"",
         "--output-directory", "`"$Root\data\comfy-output`"") $ComfyDir "comfyui"
     Remove-Item Env:WORKSTATION_COMFY_AUX_DEVICE, Env:WORKSTATION_COMFY_AUX_PARTS -ErrorAction SilentlyContinue
+    # A quick ComfyUI on the small card ("comfyQuick": "on" in data\gpu-settings.json): Prestige selects with SAM 3.1
+    # there, so a selection doesn't wait for a render here. Its own temp folder, as ComfyUI empties it on start.
+    if ($GpuPlan -and $GpuPlan.ComfyQuick) {
+        Start-Bg "comfyui-quick" 8189 $ComfyPython @(
+            "main.py", "--listen", "127.0.0.1", "--port", "8189", "--disable-smart-memory",
+            "--extra-model-paths-config", "`"$Runtime\comfy-extra-models.yaml`"",
+            "--output-directory", "`"$Root\data\comfy-output`"", "--temp-directory", "`"$Root\data\comfy-quick`"") $ComfyDir "comfyquick"
+    }
 } elseif (-not $NoComfy) {
     Write-Host "  ComfyUI isn't installed (run install.ps1), so images and video are off"
 }

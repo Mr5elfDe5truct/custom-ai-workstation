@@ -128,6 +128,7 @@ Optional. Every key can be left out ([example](gpu-settings.example.json)):
 | `llamaFit` | `auto`, `on`, `off` | `auto`: off on one 11–13.5 GB card, on everywhere else |
 | `tensorSplit` | e.g. `"12,6"`, in the order of the llama.cpp cards (big card first) | `auto` (`--fit` decides). A hand-set split turns `--fit` off, so the ini's own offload settings apply |
 | `comfyAux` | with two cards for ComfyUI: `auto`, `off`, or a list of `upscaler`, `vae`, `text_encoder` | `auto`: the upscaler (see above) |
+| `comfyQuick` | `on`, `off` | `off`. `on` starts a second, small ComfyUI on the small card (port 8189) that Prestige uses for click to select (SAM 3.1), so a selection doesn't wait for a render on the big card. Measured on an RTX 2060 6 GB: 3 s a selection at 2.0 GB of VRAM (as fast as the 3060), and an 8 s video cut-out in 117 s at 3.0 GB. It takes ~2.4 GB of system RAM, which matters during InfiniteTalk renders (~22 GB) on a 32 GB PC |
 
 For example, on a 12 + 6 GB pair, to keep the 9B fast chat and Gemma 4 12B on the big card and use the small one
 only for llama.cpp's pool:
