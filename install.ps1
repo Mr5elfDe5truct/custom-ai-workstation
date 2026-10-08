@@ -197,6 +197,7 @@ $PackInfo = [ordered]@{
     "3d"     = @{ GB = 9.3;  Text = "Picture to 3D  Pixal3D (ComfyUI, int8) - a picture to a textured 3D model (.glb)" }
     talk     = @{ GB = 17.4; Text = "Talking        InfiniteTalk on Wan 2.1 14B (ComfyUI, GGUF) - a face and a voice to a lip-synced video" }
     select   = @{ GB = 2.2;  Text = "Select         SAM 3.1 + BiRefNet (ComfyUI) - click or name to select, cut-outs, background removal" }
+    upscale  = @{ GB = 12.3; Text = "Upscale        SeedVR2 7B + 3B (ComfyUI, int8) - sharpen pictures to 1080p or 4K, videos to 1080p" }
 }
 Step 3 "Choosing models"
 if (-not $Packs) {
@@ -531,6 +532,14 @@ if ($Packs -contains "select") {
     foreach ($f in @(@("Comfy-Org/sam3.1", "checkpoints/sam3.1_multiplex_fp16.safetensors"),
                      @("Comfy-Org/BiRefNet", "background_removal/birefnet.safetensors"))) {
         Download (HF $f[0] $f[1]) (Join-Path $comfyModels ($f[1] -replace "/", "\"))
+    }
+}
+if ($Packs -contains "upscale") {
+    # SeedVR2 (ByteDance, Apache-2.0) for workflows\seedvr2-upscale-image.api.json (the 7B) and -video.api.json (the
+    # 3B), run by ComfyUI's own nodes (0.38 or newer, with its faster SeedVR2), in tiles so 4K fits a 12 GB card.
+    foreach ($f in "diffusion_models/seedvr2_7b_int8_convrot.safetensors", "diffusion_models/seedvr2_3b_int8_convrot.safetensors",
+                   "vae/seedvr2_ema_vae_fp16.safetensors") {
+        Download (HF "Comfy-Org/SeedVR2" $f) (Join-Path $comfyModels ($f -replace "/", "\"))
     }
 }
 if ($Packs -contains "images") {
