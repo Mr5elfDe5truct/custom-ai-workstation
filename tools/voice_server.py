@@ -2,6 +2,9 @@
 
 OpenAI-compatible, so Open WebUI and Prestige use it like any speech API:
   POST /v1/audio/transcriptions   multipart file (+ language)       -> {"text": ...}
+                                  response_format=verbose_json        -> {"text", "duration", "segments": [{start, end, text,
+                                                                         words: [{start, end, word}]}]} (no voice filter,
+                                                                         so sung lyrics over music are kept)
   POST /v1/audio/speech           {"input", "voice", "response_format"} -> audio (wav, or mp3 with ffmpeg)
                                   {"stream": true} -> raw 16-bit mono PCM as it is made (rate in X-Sample-Rate)
   GET  /v1/audio/voices           VoxCPM2 voices: the built-in designed voices plus any clips in data\\voices
@@ -142,15 +145,20 @@ def _whisper():
     return state["whisper"]
 
 
-def _transcribe(path: str, language: str | None, beam: int = 5) -> str:
+def _transcribe(path: str, language: str | None, beam: int = 5, words: bool = False):
     # Greedy (beam 1) is Live mode: its clips are already cut to the speech, so Whisper's own voice filter and
-    # timestamps are skipped too.
+    # timestamps are skipped too. With words (verbose_json, e.g. a song's lyrics for Prestige's Director) every word
+    # gets its time, and the voice filter is off: it drops singing over music.
     kw = {"vad_filter": True} if beam > 1 else {"vad_filter": False, "without_timestamps": True}
+    if words:
+        kw = {"vad_filter": False, "word_timestamps": True}
+    out = []
     with gpu_lock:
         model = _whisper()
         try:
             segs, _ = model.transcribe(path, language=language or None, beam_size=beam, **kw)
-            text = " ".join(s.text.strip() for s in segs)
+            out = list(segs)
+            text = " ".join(s.text.strip() for s in out)
         except RuntimeError as e:  # out of GPU memory mid-run: retry once on the CPU
             if state["whisper_device"] != "cuda":
                 raise
@@ -161,9 +169,19 @@ def _transcribe(path: str, language: str | None, beam: int = 5) -> str:
             state["whisper"] = WhisperModel("base", device="cpu", compute_type="int8", download_root=str(WHISPER_DIR))
             state["whisper_device"] = "cpu"
             segs, _ = state["whisper"].transcribe(path, language=language or None, beam_size=beam, **kw)
-            text = " ".join(s.text.strip() for s in segs)
+            out = list(segs)
+            text = " ".join(s.text.strip() for s in out)
         state["whisper_used"] = time.time()
+    if not words:
         return text.strip()
+    return {
+        "text": text.strip(),
+        "segments": [
+            {"start": round(s.start, 2), "end": round(s.end, 2), "text": s.text.strip(),
+             "words": [{"start": round(w.start, 2), "end": round(w.end, 2), "word": w.word.strip()} for w in (s.words or [])]}
+            for s in out
+        ],
+    }
 
 
 @app.post("/v1/audio/transcriptions")
@@ -174,9 +192,12 @@ async def transcriptions(file: UploadFile = File(...), model: str = Form(""), la
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f:
         f.write(await file.read())
     try:
-        text = await asyncio.to_thread(_transcribe, f.name, language.strip().lower() or None, max(1, min(beam_size, 5)))
+        verbose = response_format == "verbose_json"
+        text = await asyncio.to_thread(_transcribe, f.name, language.strip().lower() or None, max(1, min(beam_size, 5)), verbose)
     finally:
         os.unlink(f.name)
+    if verbose:
+        return text
     if response_format == "text":
         return Response(text, media_type="text/plain")
     return {"text": text}

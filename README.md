@@ -78,6 +78,7 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | 🧊 | **Picture to 3D** (Prestige) | Pixal3D (TencentARC) turns a picture into a textured 3D model (.glb) through ComfyUI's own nodes: 3 to 8 minutes and 4.3 to 7.3 GB of VRAM on the 3060 |
 | 🗣️ | **Talking characters** (Prestige) | InfiniteTalk (MeiGen) through ComfyUI's own nodes: a face and a voice (Kokoro, VoxCPM2 or a recording) become a lip-synced video, ~4.5 min per 3 s of speech on the 3060 |
 | 🎯 | **Click to select** (Prestige) | SAM 3.1 through ComfyUI's own nodes: click or name something in a picture to change it, remove it or cut it out; BiRefNet background removal; a subject tracked through a video onto a green screen |
+| 🎬 | **Director** (Prestige) | One prompt to a short music video: the chat model plans it, ACE-Step sings it, LTX-2.5 shoots it, Whisper times the lyrics (the voice server's `verbose_json`) and ffmpeg joins it, one model at a time |
 | 🗂️ | **Shared long-term memory** | every model reads and writes the same memory; chats are saved |
 | 📚 | **Chat with your files** (Prestige) | Drop PDFs, Word documents, notes or a folder into a chat; Qwen3-Embedding 0.6B (Ollama) indexes them on this PC and answers cite the file and page |
 
