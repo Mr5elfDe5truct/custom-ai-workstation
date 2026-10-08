@@ -76,6 +76,7 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 | 🎵 | **Songs** (Prestige) | ACE-Step 1.5 turbo through ComfyUI: a style and lyrics (or the chat model writes them with `/song`) become a sung song, 30 s to 4 min |
 | 🎧 | **Transcribe** (Prestige) | Drop a recording or a video into a chat: Phonon-2 writes it down and Nemotron 3 Diarization says who spoke when, then the chat model summarises it |
 | 🧊 | **Picture to 3D** (Prestige) | Pixal3D (TencentARC) turns a picture into a textured 3D model (.glb) through ComfyUI's own nodes: 3 to 8 minutes and 4.3 to 7.3 GB of VRAM on the 3060 |
+| 🗣️ | **Talking characters** (Prestige) | InfiniteTalk (MeiGen) through ComfyUI's own nodes: a face and a voice (Kokoro, VoxCPM2 or a recording) become a lip-synced video, ~4.5 min per 3 s of speech on the 3060 |
 | 🗂️ | **Shared long-term memory** | every model reads and writes the same memory; chats are saved |
 | 📚 | **Chat with your files** (Prestige) | Drop PDFs, Word documents, notes or a folder into a chat; Qwen3-Embedding 0.6B (Ollama) indexes them on this PC and answers cite the file and page |
 
@@ -127,6 +128,7 @@ chat keeps going while a render runs. Small cards get smaller models and context
 | Images (alternative) | Z-Image-Turbo | ComfyUI | 21 GB | ~35–40 s at 1024² |
 | Text → video + audio | LTX-2.5 22B distilled Q4_K_M, two-stage with the x2 latent upscaler | ComfyUI + GGUF | ~34 GB | ~3.5 min for 4 s at 768×512 from an NVMe drive (~9.5 min from an HDD); 5 s ~3.8 min, 10 s ~5.4 min, 1280×704 10 s ~10 min, all within 12 GB (part of the model streams from RAM) |
 | Picture → 3D model | Pixal3D int8 (TencentARC, MIT) + DINOv3, TRELLIS.2 shape and texture VAEs, MoGe-2 (field of view), BiRefNet (cut-out); remeshed, UV-unwrapped, PBR textures baked at 4096 (`workflows/pixal3d-image-to-3d.api.json`) | ComfyUI (native) | ~9.3 GB | 3 to 8 min a model (203 s for a simple axe, 468 s for a detailed dragon), peak 4.3 to 7.3 GB VRAM; a 60 to 70 MB textured .glb. Shape upsampled at 1024 voxels and remeshed at 512 so detailed subjects fit 12 GB |
+| Talking video (Prestige) | InfiniteTalk single-speaker (MeiGen, Apache-2.0) on Wan 2.1 I2V 14B 480p Q4_K_M + lightx2v step-distill LoRA, wav2vec2 speech encoder, 4 steps at 448×640, 81-frame parts chained on the last 9 frames (`workflows/infinitetalk-talking.api.json`; Prestige adds the parts) | ComfyUI (native) + GGUF | ~17.4 GB (+6.5 GB without the video pack) | 3.2 s of speech in 264 s, 8 s in 774 s (~255 s per 2.9 s part), peak 10.1 GB VRAM with the rest of Wan streamed from RAM; ComfyUI uses ~22 GB of system RAM while it runs |
 | Image → video | Wan 2.2 I2V A14B LightX2V 4-step Q4_K_M | ComfyUI + GGUF | ~25 GB | ~10 min for 5 s |
 | Long video (image → up to 4 chained shots) | Wan 2.2 I2V + Stable Video Infinity v2 PRO LoRAs (KJNodes, LayerStyle, Fill-Nodes, ReservedVRAM, Memory_Cleanup, essentials_mb, Easy-Use custom nodes) | ComfyUI | +2.5 GB of LoRAs | ~7 min for 4 shots of 49 frames at 480² |
 | Songs (Prestige) | ACE-Step 1.5 turbo: ~2.4B diffusion model, Qwen3 0.6B text encoder and 1.7B language model for the audio codes, 8 steps, tiled audio decode | ComfyUI (native) | ~10 GB | 30 s of music in ~18 s, 2 min in ~44 s, 4 min in ~53 s; ~5.3 GB VRAM at any length (+20–60 s the first time after a big chat model unloads) |
@@ -182,6 +184,7 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `music` | ACE-Step 1.5 turbo (ComfyUI) for Prestige's songs: Studio's Music tab and `/song` in chat | 10 GB |
 | `transcribe` | Phonon-2 speech-to-text (CPU) and Nemotron 3 Diarization (NeMo-Speech.cpp, CUDA) for Prestige's Transcribe: recordings and videos to text with who said what | 1 GB |
 | `3d` | Pixal3D for Prestige's Picture to 3D (ComfyUI): a picture to a textured .glb | 9.3 GB |
+| `talk` | InfiniteTalk for Prestige's talking characters (ComfyUI): Wan 2.1 14B Q4_K_M, the lightx2v LoRA, InfiniteTalk's audio patch and wav2vec2 | 17.4 GB |
 
 With any pack it also gets Qwen3-Embedding 0.6B (0.6 GB), which Prestige's Knowledge uses to read your files.
 

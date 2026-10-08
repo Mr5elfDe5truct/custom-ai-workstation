@@ -84,6 +84,8 @@ workstation_$($dir.Replace('-', '_')):
   clip_vision: clip_vision/
   geometry_estimation: geometry_estimation/
   background_removal: background_removal/
+  model_patches: model_patches/
+  audio_encoders: audio_encoders/
 
 "@
 }
@@ -105,6 +107,7 @@ comfy_desktop_shared:
   upscale_models: upscale_models/
   latent_upscale_models: latent_upscale_models/
   audio_encoders: audio_encoders/
+  model_patches: model_patches/
   controlnet: controlnet/
   embeddings: embeddings/
 "@
