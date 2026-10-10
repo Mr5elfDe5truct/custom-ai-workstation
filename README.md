@@ -187,7 +187,8 @@ It installs into `%USERPROFILE%\RG Studios\Workstation` (change it with `-Root`)
 | `images` | Qwen-Image-2.1 text-to-image, editing and reference images, its 4-step turbo (ComfyUI GGUF), and Z-Image-Turbo | 37 GB |
 | `video` | Wan 2.2 image-to-video and LTX-2.5 text- and image-to-video (ComfyUI GGUF) | 60 GB |
 | `computer` | UI-TARS 1.5 7B (llama.cpp); it then asks about Nex-N2.5-mini (+21.6 GB, 32 GB RAM; or `-Nex`), the model Prestige's Do it for me prefers | 7 GB |
-| `music` | ACE-Step 1.5 turbo (ComfyUI) for Prestige's songs: Studio's Music tab, `/song` in chat and the song editor | 10 GB |
+| `music` | ACE-Step 1.5 turbo (ComfyUI) for Prestige's songs: Studio's Music tab, `/song` in chat and the song editor; the base model for its stems | 14.8 GB |
+| `music-xl` | ACE-Step 1.5 XL turbo for Prestige's High quality songs (~11 GB of VRAM) | 10 GB |
 | `transcribe` | Phonon-2 speech-to-text (CPU) and Nemotron 3 Diarization (NeMo-Speech.cpp, CUDA) for Prestige's Transcribe: recordings and videos to text with who said what | 1 GB |
 | `3d` | Pixal3D for Prestige's Picture to 3D (ComfyUI): a picture to a textured .glb | 9.3 GB |
 | `talk` | InfiniteTalk for Prestige's talking characters (ComfyUI): Wan 2.1 14B Q4_K_M, the lightx2v LoRA, InfiniteTalk's audio patch and wav2vec2 | 17.4 GB |

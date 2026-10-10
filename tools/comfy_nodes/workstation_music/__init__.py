@@ -8,6 +8,10 @@ work on a song that exists, the way its own pipeline does it (acestep/core/gener
 * extend: the same, with silence added before and/or after the song and those parts made new.
 * cover: a new song that follows the source's melody and structure. The source is turned into the model's 5 Hz
   hints, for the first `strength` of the steps; after that it's a plain new song, so the style can take over.
+* extract (the base model only, acestep_v1.5_base): the model hears the whole song and makes one track of it, a stem
+  such as the vocals or the drums; the text encoder names the track. lego and complete (a new track to play along,
+  or the rest of the band around one) are wired the same way, but in tests on a 60 s song they came out wordless and
+  out of key with the source, so Prestige doesn't offer them.
 
 One node, "ACE-Step 1.5 Song Edit", takes the model and the source song's latent (VAE Encode Audio) and gives back the
 model to sample with and the latent to start from. Use it with TextEncodeAceStepAudio1.5 (generate_audio_codes off,
@@ -52,7 +56,7 @@ class AceStep15SongEdit:
             "required": {
                 "model": ("MODEL",),
                 "source": ("LATENT", {"tooltip": "The song to work on, from VAE Encode Audio with the ACE-Step 1.5 VAE."}),
-                "task": (["repaint", "extend", "cover"],),
+                "task": (["repaint", "extend", "cover", "extract", "lego", "complete"],),
                 "start": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 2000.0, "step": 0.01, "tooltip": "repaint: where the part to redo starts (seconds)."}),
                 "end": ("FLOAT", {"default": 10.0, "min": 0.0, "max": 2000.0, "step": 0.01, "tooltip": "repaint: where it ends (seconds)."}),
                 "extend_before": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 600.0, "step": 0.01, "tooltip": "extend: seconds of new music before the song."}),
@@ -70,7 +74,7 @@ class AceStep15SongEdit:
     RETURN_NAMES = ("model", "latent")
     FUNCTION = "edit"
     CATEGORY = "model/latent/ace"
-    DESCRIPTION = "Repaint part of an ACE-Step 1.5 song, extend it, or cover it in a new style."
+    DESCRIPTION = "Repaint part of an ACE-Step 1.5 song, extend it, cover it in a new style, or (base model) take a stem out of it or add a track to it."
 
     def edit(self, model, source, task, start, end, extend_before, extend_after, keep_until, strength, crossfade, song_lyrics=""):
         src = source["samples"]
@@ -99,6 +103,7 @@ class AceStep15SongEdit:
             gen = torch.zeros(T)
             gen[a:b] = 1
         else:
+            # cover, extract, lego, complete: the whole song as the context, everything made new.
             total, target, gen = T, src, None
 
         if gen is not None:
@@ -143,6 +148,9 @@ def _forward(dm, state, x, timestep, text_hidden_states, lyric_hidden_states, re
         else:
             src = _silence(T, device, dtype).movedim(-1, -2).expand(B, -1, -1)
         chunk = torch.ones_like(x)
+    elif state["chunk"] is None:  # extract, lego, complete: the whole song is the context
+        # ACE-Step's "auto" chunk mask (2.0) let more of the mix bleed into an extracted stem; 1.0 kept it clean.
+        chunk = torch.ones_like(x)
     else:
         chunk = state["chunk"].to(device=device, dtype=dtype)[:T][None, :, None].expand(B, T, x.shape[2])
 
@@ -161,7 +169,22 @@ INSTRUCTIONS = {
     "extend": "Repaint the mask area based on the given conditions:",
     "cover": "Generate audio semantic tokens based on the given conditions:",
     "text2music": "Fill the audio semantic mask based on the given conditions:",
+    "extract": "Extract the {TRACK} track from the audio:",
+    "lego": "Generate the {TRACK} track based on the audio context:",
+    "complete": "Complete the input track with {TRACK}:",
 }
+# The tracks ACE-Step knows (acestep/constants.py TRACK_NAMES).
+TRACKS = ["vocals", "backing_vocals", "drums", "bass", "guitar", "keyboard", "strings", "synth", "percussion", "brass", "woodwinds", "fx"]
+
+
+def instruction(task, track):
+    names = [t.strip().upper() for t in track.replace("|", ",").split(",") if t.strip()]
+    if "{TRACK}" not in INSTRUCTIONS[task]:
+        return INSTRUCTIONS[task]
+    if not names:  # ACE-Step's wording without a track
+        return {"extract": "Extract the track from the audio:", "lego": "Generate the track based on the audio context:",
+                "complete": "Complete the input track:"}[task]
+    return INSTRUCTIONS[task].format(TRACK=" | ".join(names) if task == "complete" else names[0])
 
 
 class TextEncodeAceStep15Task:
@@ -178,7 +201,10 @@ class TextEncodeAceStep15Task:
                 "timesignature": (["2", "3", "4", "6"], {"default": "4"}),
                 "language": ("STRING", {"default": "en"}),
                 "keyscale": ("STRING", {"default": "C major"}),
-            }
+            },
+            "optional": {
+                "track": ("STRING", {"default": "", "tooltip": "extract and lego: the track (" + ", ".join(TRACKS) + "); complete: the tracks to add, comma-separated."}),
+            },
         }
 
     RETURN_TYPES = ("CONDITIONING",)
@@ -186,12 +212,12 @@ class TextEncodeAceStep15Task:
     CATEGORY = "model/conditioning/ace"
     DESCRIPTION = "TextEncodeAceStepAudio1.5 without the audio codes, telling the model which job it's doing."
 
-    def encode(self, clip, task, tags, lyrics, bpm, duration, timesignature, language, keyscale):
+    def encode(self, clip, task, tags, lyrics, bpm, duration, timesignature, language, keyscale, track=""):
         tok = clip.tokenizer
         metas = dict(bpm=bpm, duration=duration, timesignature=int(timesignature), language=language, keyscale=keyscale)
         tokens = clip.tokenize(tags, lyrics=lyrics, seed=0, generate_audio_codes=False, **metas)
         cap = tok._metas_to_cap(bpm=bpm, timesignature=int(timesignature), keyscale=keyscale, duration=duration)
-        prompt = f"# Instruction\n{INSTRUCTIONS[task]}\n\n# Caption\n{tags.strip()}\n\n# Metas\n{cap}\n<|endoftext|>\n<|endoftext|>"
+        prompt = f"# Instruction\n{instruction(task, track)}\n\n# Caption\n{tags.strip()}\n\n# Metas\n{cap}\n<|endoftext|>\n<|endoftext|>"
         tokens["qwen3_06b"] = tok.qwen3_06b.tokenize_with_weights(prompt, False, disable_weights=True)
         return (clip.encode_from_tokens_scheduled(tokens),)
 
