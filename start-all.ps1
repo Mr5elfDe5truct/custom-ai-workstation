@@ -187,9 +187,12 @@ Start-Bg "mcpo" 8200 "$Root\envs\tools\Scripts\mcpo.exe" (Get-McpoArgs $Runtime)
 # 5. ComfyUI (images + video), headless, using Comfy Desktop's install and both model folders.
 #    --disable-smart-memory moves models off the GPU after each job so the chat models can use it.
 if (-not $NoComfy -and $ComfyDir) {
-    # The Workstation's own node: with two cards for ComfyUI, text encoders, VAEs and the LTX upscaler go on the second
-    # (it does nothing otherwise). Copied on every start so it follows this folder's version.
-    Copy-Item "$Root\tools\comfy_nodes\workstation_gpus" "$ComfyDir\custom_nodes" -Recurse -Force
+    # The Workstation's own nodes, copied on every start so they follow this folder's version: workstation_gpus puts
+    # text encoders, VAEs and the LTX upscaler on a second card for ComfyUI (it does nothing otherwise), and
+    # workstation_music edits ACE-Step songs for Prestige (redo a part, extend, cover).
+    foreach ($n in "workstation_gpus", "workstation_music") {
+        Copy-Item "$Root\tools\comfy_nodes\$n" "$ComfyDir\custom_nodes" -Recurse -Force
+    }
     Start-Bg "comfyui" 8188 $ComfyPython @(
         "main.py", "--listen", "127.0.0.1", "--port", "8188", "--disable-smart-memory",
         "--extra-model-paths-config", "`"$Runtime\comfy-extra-models.yaml`"",
