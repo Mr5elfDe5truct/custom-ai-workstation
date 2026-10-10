@@ -192,7 +192,8 @@ $PackInfo = [ordered]@{
     images   = @{ GB = 36.5; Text = "Images         Qwen-Image-2.1 (+ 4-step turbo) and Z-Image-Turbo (ComfyUI) - text to image and editing" }
     video    = @{ GB = 60.3; Text = "Video          LTX-2.5 + Wan 2.2 (ComfyUI) - text/image to video with sound" }
     computer = @{ GB = 6.9;  Text = "Computer use   UI-TARS 1.5 7B (llama.cpp) - drives the mouse and keyboard; asks about Nex-N2.5-mini (+21.6 GB)" }
-    music    = @{ GB = 10.0; Text = "Music          ACE-Step 1.5 turbo (ComfyUI) - songs with vocals from a style and lyrics" }
+    music    = @{ GB = 14.8; Text = "Music          ACE-Step 1.5 turbo + base (ComfyUI) - songs with vocals, the song editor and stems" }
+    "music-xl" = @{ GB = 10.0; Text = "Music XL       ACE-Step 1.5 XL turbo (ComfyUI) - Prestige's High quality songs; ~11 GB of VRAM" }
     transcribe = @{ GB = 1.0; Text = "Transcribe     Phonon-2 + Nemotron 3 Diarization - recordings to text with who said what" }
     "3d"     = @{ GB = 9.3;  Text = "Picture to 3D  Pixal3D (ComfyUI, int8) - a picture to a textured 3D model (.glb)" }
     talk     = @{ GB = 17.4; Text = "Talking        InfiniteTalk on Wan 2.1 14B (ComfyUI, GGUF) - a face and a voice to a lip-synced video" }
@@ -230,6 +231,7 @@ if ($gpus) {
     if ($Packs -contains "voice" -and $vramGB -lt 8) { Warn "VoxCPM2 voices need ~7 GB of VRAM; on $vramGB GB stick to the Kokoro voices." }
     if (($Packs -contains "images" -or $Packs -contains "video") -and $vramGB -lt 10) { Warn "Images and video are tuned for 12 GB; on $vramGB GB they render, but slower." }
     if ($Packs -contains "music" -and $vramGB -lt 6) { Warn "ACE-Step songs peak at about 5.3 GB of VRAM; on $vramGB GB part of it runs from RAM (slow)." }
+    if ($Packs -contains "music-xl" -and $vramGB -lt 12) { Warn "ACE-Step XL peaks at about 11 GB of VRAM; on $vramGB GB part of it runs from RAM (slow)." }
 }
 $needGB = 12 + ($Packs | ForEach-Object { $PackInfo[$_].GB } | Measure-Object -Sum).Sum   # ~12 GB for software
 $drive = Get-PSDrive ((Split-Path $Root -Qualifier).TrimEnd(":"))
@@ -575,11 +577,20 @@ if ($Packs -contains "video") {
 }
 if ($Packs -contains "music") {
     # ACE-Step 1.5 turbo for workflows\ace-step-15-song.api.json: the diffusion model, its Qwen 0.6B text encoder and
-    # 1.7B language model (writes the audio codes), and its VAE. ComfyUI 0.37 or newer runs it natively.
+    # 1.7B language model (writes the audio codes), and its VAE. ComfyUI 0.37 or newer runs it natively. The base model
+    # takes stems out of a song for Prestige's song editor (tools\comfy_nodes\workstation_music).
     $ace = "Comfy-Org/ace_step_1.5_ComfyUI_files"
-    foreach ($f in @(@("diffusion_models", "acestep_v1.5_turbo.safetensors"), @("text_encoders", "qwen_0.6b_ace15.safetensors"),
+    foreach ($f in @(@("diffusion_models", "acestep_v1.5_turbo.safetensors"), @("diffusion_models", "acestep_v1.5_base.safetensors"),
+                     @("text_encoders", "qwen_0.6b_ace15.safetensors"),
                      @("text_encoders", "qwen_1.7b_ace15.safetensors"), @("vae", "ace_1.5_vae.safetensors"))) {
         Download (HF $ace "split_files/$($f[0])/$($f[1])") (Join-Path $comfyModels "$($f[0])\$($f[1])")
+    }
+}
+if ($Packs -contains "music-xl") {
+    # ACE-Step 1.5 XL turbo (4B), Prestige's High quality songs; it uses the music pack's text encoders and VAE.
+    foreach ($f in @(@("diffusion_models", "acestep_v1.5_xl_turbo_bf16.safetensors"), @("text_encoders", "qwen_0.6b_ace15.safetensors"),
+                     @("text_encoders", "qwen_1.7b_ace15.safetensors"), @("vae", "ace_1.5_vae.safetensors"))) {
+        Download (HF "Comfy-Org/ace_step_1.5_ComfyUI_files" "split_files/$($f[0])/$($f[1])") (Join-Path $comfyModels "$($f[0])\$($f[1])")
     }
 }
 if (-not $Packs) { Skip "no model packs picked (add them later with: .\install.ps1 -Packs fast,images)" }
