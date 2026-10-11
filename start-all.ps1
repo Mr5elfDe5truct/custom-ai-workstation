@@ -2,16 +2,23 @@
 #   .\start-all.ps1            everything
 #   .\start-all.ps1 -NoComfy   skip the headless ComfyUI (use this if you prefer the Comfy Desktop app)
 #   .\start-all.ps1 -NoBrowser don't open the app window at the end
+#   .\start-all.ps1 -Manifest  get everything ready and write data\runtime\services.json (how to start each service),
+#                              but start nothing: Prestige starts, stops and restarts each service itself from it
 #   .\start-all.ps1 -Theme neon default theme: dragon, neon, glass, hud or off (Ctrl+Alt+T switches in the app)
 #   .\start-all.ps1 -GpuMode pool  with several GPUs: split (default), pool or single, for this start only
 #                                  (data\gpu-settings.json sets it for good; see docs\GPUS.md)
 # The services' other settings (Ollama, llama.cpp, which services run) are in data\service-settings.json, which
 # Prestige's Workstation settings write; see docs\SETTINGS.md. The switches above win over it for one start.
-param([switch]$NoComfy, [switch]$NoBrowser,
+param([switch]$NoComfy, [switch]$NoBrowser, [switch]$Manifest,
       [ValidateSet("dragon", "neon", "glass", "hud", "off")][string]$Theme = "",
       [ValidateSet("", "auto", "single", "split", "pool")][string]$GpuMode = "")
 
 $Root = $PSScriptRoot
+# The environment as it was handed to this script: each service's entry in services.json lists only what differs.
+$BaseEnv = @{}
+Get-ChildItem Env: | ForEach-Object { $BaseEnv[$_.Name] = $_.Value }
+$Services = New-Object System.Collections.ArrayList   # services.json: every service this start would run
+$OffServices = New-Object System.Collections.ArrayList
 $Logs = Join-Path $Root "logs"
 New-Item -ItemType Directory -Force $Logs | Out-Null
 
@@ -126,11 +133,21 @@ function Test-Port($port) {
 
 # $gpuService: the service in the GPU plan whose cards this process may use (none: it doesn't use the GPU).
 function Start-Bg($name, $port, $exe, $argList, $workDir = $Root, $gpuService = $null) {
+    if ($gpuService) { Set-ServiceGpus $GpuPlan $gpuService } else { Remove-Item Env:CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue }
+    # Its entry in services.json: the command line and the environment variables this script set or removed for it.
+    $envDiff = [ordered]@{}
+    foreach ($e in Get-ChildItem Env:) { if (-not $BaseEnv.ContainsKey($e.Name) -or $BaseEnv[$e.Name] -ne $e.Value) { $envDiff[$e.Name] = $e.Value } }
+    foreach ($k in $BaseEnv.Keys) { if (-not (Test-Path "Env:$k")) { $envDiff[$k] = $null } }
+    [void]$Services.Add([ordered]@{
+        name = $name; port = $port; exe = $exe; args = $(if ($argList -is [array]) { $argList -join " " } else { "$argList" })
+        workDir = $workDir; env = $envDiff; gpu = $gpuService
+        log = "$Logs\$name.log"; errLog = "$Logs\$name.err.log"
+    })
+    if ($Manifest) { return }
     if (Test-Port $port) {
         $where = if ($gpuService -and $GpuMoved -contains $gpuService) { "; it stays on the GPU it started on (stop-all.ps1 and start again to move it)" } else { "" }
         Write-Host "  $name already running (port $port)$where"; return
     }
-    if ($gpuService) { Set-ServiceGpus $GpuPlan $gpuService } else { Remove-Item Env:CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue }
     Start-Process -FilePath $exe -ArgumentList $argList -WorkingDirectory $workDir -WindowStyle Hidden `
         -RedirectStandardOutput "$Logs\$name.log" -RedirectStandardError "$Logs\$name.err.log"
     Write-Host "  started $name (port $port)"
@@ -193,7 +210,10 @@ Start-Bg "mcpo" 8200 "$Root\envs\tools\Scripts\mcpo.exe" (Get-McpoArgs $Runtime)
 
 # 5. ComfyUI (images + video), headless, using Comfy Desktop's install and both model folders.
 #    --disable-smart-memory moves models off the GPU after each job so the chat models can use it.
-if ($Svc.comfyui -ne "on") { $NoComfy = $true; Write-Host "  ComfyUI is switched off in the Workstation settings" }
+if ($Svc.comfyui -ne "on") {
+    $NoComfy = $true; Write-Host "  ComfyUI is switched off in the Workstation settings"
+    [void]$OffServices.Add([ordered]@{ name = "comfyui"; port = 8188; why = "switched off in the Workstation settings" })
+}
 if (-not $NoComfy -and $ComfyDir) {
     # The Workstation's own nodes, copied on every start so they follow this folder's version: workstation_gpus puts
     # text encoders, VAEs and the LTX upscaler on a second card for ComfyUI (it does nothing otherwise), and
@@ -216,6 +236,7 @@ if (-not $NoComfy -and $ComfyDir) {
     }
 } elseif (-not $NoComfy) {
     Write-Host "  ComfyUI isn't installed (run install.ps1), so images and video are off"
+    [void]$OffServices.Add([ordered]@{ name = "comfyui"; port = 8188; why = "not installed (install.ps1)" })
 }
 
 # 6. Open WebUI (single user, only reachable from this PC).
@@ -271,8 +292,15 @@ if ($OpenWebUI) {
     Start-Bg "open-webui" 8080 "$Root\envs\open-webui\Scripts\open-webui.exe" "serve --host 127.0.0.1 --port 8080" $Root "openwebui"
 } else {
     Write-Host "  Open WebUI is switched off in the Workstation settings"
+    [void]$OffServices.Add([ordered]@{ name = "open-webui"; port = 8080; why = "switched off in the Workstation settings" })
 }
 Remove-Item Env:CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue
+
+# How to start each service, for Prestige's service manager (written on every start; -Manifest stops here).
+$manifestJson = [ordered]@{ version = 1; written = (Get-Date).ToString("o"); root = $Root; services = @($Services); off = @($OffServices) } |
+    ConvertTo-Json -Depth 6
+[IO.File]::WriteAllText("$Runtime\services.json", $manifestJson, (New-Object Text.UTF8Encoding $false))
+if ($Manifest) { Write-Host "Wrote $Runtime\services.json"; return }
 
 if ($OpenWebUI) {
     Write-Host "Waiting for Open WebUI..."
