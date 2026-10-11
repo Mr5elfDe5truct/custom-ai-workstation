@@ -85,11 +85,24 @@ Everything below was generated on the workstation itself (RTX 3060 12 GB, 32 GB 
 
 ## 🎩 Prestige desktop app
 
+<p align="center"><a href="https://github.com/Mr5elfDe5truct/prestige"><img src="https://raw.githubusercontent.com/Mr5elfDe5truct/prestige/main/docs/banner.png" alt="Prestige by R.G. Studios" width="100%"></a></p>
+
 **[Prestige by R.G. Studios](https://github.com/Mr5elfDe5truct/prestige)** is a native Windows app for this stack, an alternative to the
 Open WebUI window. It has streaming chat with every model, shared memory, a System dashboard with model load and unload, a Studio gallery
-with image, video and song generation, voice conversation with an animated avatar, Live voice and webcam calls, webcam vision, and chat with your
-own files (answers cite the file and page). Opening it starts the stack, and closing it
+with image, video and song generation, Storyboard music videos, Deep Research, voice conversation with an animated avatar, Live voice and
+webcam calls, webcam vision, and chat with your own files (answers cite the file and page). Opening it starts the stack, and closing it
 stops it. Download the installer from its [Releases](https://github.com/Mr5elfDe5truct/prestige/releases) page.
+
+<table>
+  <tr>
+    <td width="50%"><img src="https://raw.githubusercontent.com/Mr5elfDe5truct/prestige/main/docs/chat.jpg" alt="Prestige chat with an image made by /image"><br><p align="center"><b>Chat</b></p></td>
+    <td width="50%"><img src="https://raw.githubusercontent.com/Mr5elfDe5truct/prestige/main/docs/system.jpg" alt="Prestige System dashboard"><br><p align="center"><b>System</b></p></td>
+  </tr>
+  <tr>
+    <td><img src="https://raw.githubusercontent.com/Mr5elfDe5truct/prestige/main/docs/studio.jpg" alt="Prestige Studio gallery"><br><p align="center"><b>Studio</b></p></td>
+    <td><img src="https://raw.githubusercontent.com/Mr5elfDe5truct/prestige/main/docs/shots/storyboard.jpg" alt="Prestige Storyboard"><br><p align="center"><b>Storyboard</b></p></td>
+  </tr>
+</table>
 
 ## 🏗️ How it fits together
 
