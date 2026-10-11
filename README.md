@@ -25,6 +25,11 @@
   Nothing leaves the machine except the web lookups the AI makes with its research tools.
 </p>
 
+> [!IMPORTANT]
+> **The Workstation now lives inside [Prestige](https://github.com/Mr5elfDe5truct/prestige)** (its `engine/` folder,
+> with this repo's full history). Install Prestige and its **Setup** installs the whole stack. This repo is archived and
+> gets no more updates.
+
 ---
 
 ## ✨ Showcase
