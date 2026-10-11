@@ -173,6 +173,9 @@ On cards other than 12 GB, llama.cpp sizes its offload to the card itself (`--fi
 `.\start-all.ps1 -GpuMode pool`, or for good in `data\gpu-settings.json`. [docs/GPUS.md](docs/GPUS.md) has the details,
 every setting, and measurements from an RTX 3060 12 GB + RTX 2060 6 GB.
 
+Prestige's **Workstation settings** edit all of this (cards, Ollama, llama.cpp models, which services start)
+without touching a file; [docs/SETTINGS.md](docs/SETTINGS.md) lists what each setting does.
+
 ## 🚀 Quick start
 
 This repo holds the glue: launch scripts, configs, ComfyUI workflows, and the custom tool server. The installer
