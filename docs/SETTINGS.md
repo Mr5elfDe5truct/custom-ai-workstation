@@ -37,3 +37,11 @@ change the next time it starts (Prestige offers to restart the services after a 
 | `theme` | Open WebUI's default theme: `dragon`, `neon`, `glass`, `hud`, `off`. `-Theme` wins for one start | `dragon` |
 
 `start-all.ps1`'s switches (`-NoComfy`, `-Theme`, `-GpuMode`) still work and win over the files for that one start.
+
+## How Prestige starts the services
+
+`start-all.ps1 -Manifest` does everything a start does except starting: it works out the GPU plan, writes the config
+files in `data\runtime`, and writes `data\runtime\services.json`, which lists each service's program, command line,
+folder, environment and log files. Prestige runs that, then starts, stops and restarts each service from the list
+itself (System screen → Services). `start-all.ps1` on its own still starts everything, and `stop-all.ps1` still stops
+everything, so the Workstation works without Prestige too.
